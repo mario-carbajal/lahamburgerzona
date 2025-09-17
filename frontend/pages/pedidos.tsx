@@ -34,7 +34,7 @@ const PedidosPage = () => {
   };
 
   const subtotalWithTax = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const deliveryFee = subtotalWithTax > 200 ? 0 : 30;
+  const deliveryFee = subtotalWithTax >= 200 ? 0 : 30;
   const subtotalWithoutTax = subtotalWithTax / 1.16; // Desglosar IVA del subtotal
   const tax = subtotalWithTax - subtotalWithoutTax; // IVA desglosado
   const total = subtotalWithTax + deliveryFee;
@@ -493,7 +493,7 @@ Envío: $${deliveryFee.toFixed(2)}
                     ) : (
                       <>
                         <Phone className="w-5 h-5 mr-2" />
-                        Continuar por WhatsApp
+                        Enviar
                       </>
                     )}
                   </button>

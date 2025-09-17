@@ -196,15 +196,26 @@ app.post('/api/orders-create', async (req, res) => {
       });
     }
     
-    // Calcular total simple (usando precios fijos por ahora para debug)
+    // Calcular total usando precios reales de la base de datos
     let totalAmount = 0;
-    items.forEach(item => {
-      // Precios fijos para debug: ID 1 = $250, ID 2 = $240
-      const price = item.menuItemId === 1 ? 250 : item.menuItemId === 2 ? 240 : 200;
-      totalAmount += price * item.quantity;
-    });
+    for (const item of items) {
+      const menuItem = await executeQuery(
+        'SELECT name, price FROM menu_items WHERE id = ?',
+        [item.menuItemId]
+      );
+      
+      if (menuItem.length > 0) {
+        const menuItemData = menuItem[0];
+        totalAmount += menuItemData.price * item.quantity;
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: `Item con ID ${item.menuItemId} no encontrado`
+        });
+      }
+    }
     
-    console.log('💰 Calculated total (simplified):', totalAmount);
+    console.log('💰 Calculated total:', totalAmount);
     
     // Generar número de orden
     const orderNumber = `ORD${Date.now().toString().slice(-6)}`;
@@ -230,6 +241,37 @@ app.post('/api/orders-create', async (req, res) => {
     
     console.log('Order created with ID:', orderId);
     
+    // Guardar items del pedido en order_items (usando precios reales)
+    for (const item of items) {
+      try {
+        const menuItem = await executeQuery(
+          'SELECT name, price FROM menu_items WHERE id = ?',
+          [item.menuItemId]
+        );
+        
+        if (menuItem.length > 0) {
+          const menuItemData = menuItem[0];
+          await executeQuery(`
+            INSERT INTO order_items (
+              order_id, menu_item_id, quantity, price
+            ) VALUES (?, ?, ?, ?)
+          `, [
+            orderId,
+            item.menuItemId,
+            item.quantity,
+            menuItemData.price // Precio real del item
+          ]);
+          
+          console.log(`Item saved: ${menuItemData.name} x${item.quantity} = $${menuItemData.price}`);
+        }
+      } catch (itemError) {
+        console.error(`Error saving item ${item.menuItemId}:`, itemError.message);
+        // Continuar con el siguiente item
+      }
+    }
+    
+    console.log('All order items saved successfully');
+    
     res.json({
       success: true,
       message: 'Orden creada exitosamente',
@@ -239,6 +281,7 @@ app.post('/api/orders-create', async (req, res) => {
         totalAmount: totalAmount
       }
     });
+    
   } catch (error) {
     console.error('Error creating order:', error);
     res.status(500).json({
@@ -398,8 +441,15 @@ app.get('/api/orders-simple', async (req, res) => {
             status: order.status,
             notes: order.notes,
             itemCount: items.length,
-            itemsSummary: items.map(item => `Item ${item.menu_item_id || item.id} x${item.quantity}`).join(', '),
-            items: items,
+            itemsSummary: items.map(item => `Item ${item.menu_item_id} x${item.quantity}`).join(', '),
+            items: items.map(item => ({
+              id: item.id,
+              menuItemId: item.menu_item_id,
+              name: `Item ${item.menu_item_id}`,
+              quantity: item.quantity,
+              unitPrice: parseFloat(item.price || 0),
+              totalPrice: parseFloat(item.price || 0) * item.quantity
+            })),
             createdAt: order.created_at,
             updatedAt: order.updated_at
           };
@@ -481,6 +531,139 @@ app.use((err, req, res, next) => {
     error: 'Error interno del servidor',
     message: process.env.NODE_ENV === 'development' ? err.message : 'Algo salió mal'
   });
+});
+
+// Test endpoint para verificar estructura de tabla order_items
+app.get('/api/test-table-structure', async (req, res) => {
+  try {
+    const { executeQuery } = require('./config/database-mysql');
+    
+    // Verificar si la tabla order_items existe
+    const tableExists = await executeQuery(`
+      SELECT COUNT(*) as count 
+      FROM information_schema.tables 
+      WHERE table_schema = DATABASE() 
+      AND table_name = 'order_items'
+    `);
+    
+    if (tableExists[0].count === 0) {
+      return res.json({
+        success: false,
+        message: 'La tabla order_items no existe'
+      });
+    }
+    
+    // Obtener estructura de la tabla
+    const tableStructure = await executeQuery(`
+      DESCRIBE order_items
+    `);
+    
+    res.json({
+      success: true,
+      message: 'Estructura de tabla order_items',
+      structure: tableStructure
+    });
+    
+  } catch (error) {
+    console.error('Error checking table structure:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Test endpoint para debug del problema de items
+app.post('/api/orders-create-debug', async (req, res) => {
+  try {
+    const { executeQuery } = require('./config/database-mysql');
+    const { customer, items } = req.body;
+    
+    console.log('DEBUG: Creating order with data:', req.body);
+    
+    // Validación básica
+    if (!customer || !customer.name || !customer.phone || !customer.address) {
+      return res.status(400).json({
+        success: false,
+        error: 'Información del cliente incompleta'
+      });
+    }
+    
+    if (!items || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Debe incluir al menos un item'
+      });
+    }
+    
+    // Calcular total simple
+    let totalAmount = 0;
+    for (const item of items) {
+      totalAmount += 200 * item.quantity; // Precio fijo simple
+    }
+    
+    console.log('DEBUG: Calculated total:', totalAmount);
+    
+    // Generar número de orden
+    const orderNumber = `ORD${Date.now().toString().slice(-6)}`;
+    
+    // Crear orden básica
+    const result = await executeQuery(`
+      INSERT INTO orders (
+        order_number, customer_name, customer_phone, customer_email,
+        delivery_address, total_amount, status, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      orderNumber,
+      customer.name,
+      customer.phone,
+      customer.email || null,
+      customer.address,
+      totalAmount,
+      'pending',
+      'Orden creada desde frontend'
+    ]);
+    
+    const orderId = result.insertId;
+    
+    console.log('DEBUG: Order created with ID:', orderId);
+    
+    // Guardar items del pedido en order_items
+    for (const item of items) {
+      await executeQuery(`
+        INSERT INTO order_items (
+          order_id, menu_item_id, quantity, unit_price, total_price
+        ) VALUES (?, ?, ?, ?, ?)
+      `, [
+        orderId,
+        item.menuItemId,
+        item.quantity,
+        200, // Precio fijo
+        200 * item.quantity // Total fijo
+      ]);
+      
+      console.log(`DEBUG: Item saved: ID ${item.menuItemId} x${item.quantity} = $${200 * item.quantity}`);
+    }
+    
+    console.log('DEBUG: All order items saved successfully');
+    
+    res.json({
+      success: true,
+      message: 'Orden creada exitosamente',
+      data: {
+        orderId: orderId,
+        orderNumber: orderNumber,
+        totalAmount: totalAmount
+      }
+    });
+    
+  } catch (error) {
+    console.error('DEBUG: Error creating order:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
 });
 
 // Initialize database and start server

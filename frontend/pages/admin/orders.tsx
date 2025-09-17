@@ -482,40 +482,63 @@ Dirección: ${confirmingOrder.deliveryAddress}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-3">Items del Pedido</h3>
                   <div className="space-y-3">
-                    {selectedOrder.items.map((item, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div>
-                          <p className="font-medium text-gray-900">{item.menu_item_name || `Item ${item.menu_item_id || item.id}`}</p>
-                          <p className="text-sm text-gray-500">Cantidad: {item.quantity}</p>
-                          {item.special_instructions && (
-                            <p className="text-sm text-orange-600">Nota: {item.special_instructions}</p>
-                          )}
+                    {selectedOrder.items && selectedOrder.items.length > 0 ? (
+                      selectedOrder.items.map((item, index) => (
+                        <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div>
+                            <p className="font-medium text-gray-900">{item.menu_item_name || `Item ${item.menu_item_id || item.id}`}</p>
+                            <p className="text-sm text-gray-500">Cantidad: {item.quantity}</p>
+                            <p className="text-sm text-gray-500">Precio unitario: ${parseFloat(String(item.unit_price || 0)).toFixed(2)}</p>
+                            {item.special_instructions && (
+                              <p className="text-sm text-orange-600">Nota: {item.special_instructions}</p>
+                            )}
+                          </div>
+                          <p className="font-semibold text-gray-900">${parseFloat(String(item.total_price || 0)).toFixed(2)}</p>
                         </div>
-                        <p className="font-semibold text-gray-900">${parseFloat(String(item.total_price || item.price || 0)).toFixed(2)}</p>
+                      ))
+                    ) : (
+                      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-yellow-800">No se encontraron items para este pedido</p>
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
 
                 {/* Order Summary */}
                 <div className="border-t border-gray-200 pt-6">
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span>Subtotal:</span>
-                      <span>${parseFloat(String(selectedOrder.subtotal || 0)).toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Delivery:</span>
-                      <span>${parseFloat(String(selectedOrder.deliveryFee || 0)).toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Tax:</span>
-                      <span>${parseFloat(String(selectedOrder.tax || 0)).toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-lg font-semibold text-gray-900 border-t pt-2">
-                      <span>Total:</span>
-                      <span>${parseFloat(String(selectedOrder.totalAmount || 0)).toFixed(2)}</span>
-                    </div>
+                    {(() => {
+                      // Calcular totales basados en los items
+                      const itemsTotal = selectedOrder.items && selectedOrder.items.length > 0 
+                        ? selectedOrder.items.reduce((sum, item) => sum + parseFloat(String(item.total_price || 0)), 0)
+                        : 0;
+                      const subtotalWithTax = itemsTotal;
+                      const subtotalWithoutTax = subtotalWithTax / 1.16;
+                      const tax = subtotalWithTax - subtotalWithoutTax;
+                      const deliveryFee = subtotalWithTax >= 200 ? 0 : 30;
+                      const total = subtotalWithTax + deliveryFee;
+                      
+                      return (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span>Subtotal (sin IVA):</span>
+                            <span>${subtotalWithoutTax.toFixed(2)}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>IVA (16%):</span>
+                            <span>${tax.toFixed(2)}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Envío:</span>
+                            <span>${deliveryFee.toFixed(2)}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-lg font-semibold text-gray-900 border-t pt-2">
+                            <span>Total:</span>
+                            <span>${total.toFixed(2)}</span>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                   <div className="mt-4 space-y-2 text-sm text-gray-600">
                     <p><span className="font-medium">Método de pago:</span> {selectedOrder.paymentMethod}</p>
