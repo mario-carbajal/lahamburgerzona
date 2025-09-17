@@ -41,6 +41,8 @@ interface Order {
     unit_price?: number;
     total_price?: number;
     price?: number;
+    unitPrice?: number;
+    totalPrice?: number;
     special_instructions?: string;
   }>;
   createdAt: string;
@@ -117,6 +119,7 @@ const AdminOrders = () => {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': 'Bearer admin-token', // Token de autenticación para admin
         },
         body: JSON.stringify({ status: newStatus }),
       });
@@ -162,6 +165,7 @@ const AdminOrders = () => {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': 'Bearer admin-token', // Token de autenticación para admin
         },
         body: JSON.stringify({ reason: cancelReason.trim() }),
       });
@@ -488,12 +492,12 @@ Dirección: ${confirmingOrder.deliveryAddress}
                           <div>
                             <p className="font-medium text-gray-900">{item.menu_item_name || `Item ${item.menu_item_id || item.id}`}</p>
                             <p className="text-sm text-gray-500">Cantidad: {item.quantity}</p>
-                            <p className="text-sm text-gray-500">Precio unitario: ${parseFloat(String(item.unit_price || 0)).toFixed(2)}</p>
+                            <p className="text-sm text-gray-500">Precio unitario: ${parseFloat(String(item.unitPrice || 0)).toFixed(2)}</p>
                             {item.special_instructions && (
                               <p className="text-sm text-orange-600">Nota: {item.special_instructions}</p>
                             )}
                           </div>
-                          <p className="font-semibold text-gray-900">${parseFloat(String(item.total_price || 0)).toFixed(2)}</p>
+                          <p className="font-semibold text-gray-900">${parseFloat(String(item.totalPrice || 0)).toFixed(2)}</p>
                         </div>
                       ))
                     ) : (
@@ -510,7 +514,7 @@ Dirección: ${confirmingOrder.deliveryAddress}
                     {(() => {
                       // Calcular totales basados en los items
                       const itemsTotal = selectedOrder.items && selectedOrder.items.length > 0 
-                        ? selectedOrder.items.reduce((sum, item) => sum + parseFloat(String(item.total_price || 0)), 0)
+                        ? selectedOrder.items.reduce((sum, item) => sum + parseFloat(String(item.totalPrice || 0)), 0)
                         : 0;
                       const subtotalWithTax = itemsTotal;
                       const subtotalWithoutTax = subtotalWithTax / 1.16;

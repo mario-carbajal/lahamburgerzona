@@ -351,6 +351,53 @@ app.post('/api/create-test-order', async (req, res) => {
   }
 });
 
+// Endpoint para actualizar el status de pedidos
+app.put('/api/orders/:id/status', async (req, res) => {
+  try {
+    const { executeQuery } = require('./config/database-mysql');
+    const orderId = req.params.id;
+    const { status } = req.body;
+
+    console.log(`Updating order ${orderId} status to:`, status);
+
+    // Validar que el status sea válido
+    const validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Status inválido'
+      });
+    }
+
+    // Verificar que el pedido existe
+    const orders = await executeQuery('SELECT * FROM orders WHERE id = ?', [orderId]);
+    
+    if (orders.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Pedido no encontrado'
+      });
+    }
+
+    // Actualizar el status de la orden
+    await executeQuery(
+      'UPDATE orders SET status = ?, updated_at = NOW() WHERE id = ?',
+      [status, orderId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Status actualizado exitosamente'
+    });
+  } catch (error) {
+    console.error('Error updating order status:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Endpoint para cancelar pedidos
 app.put('/api/orders/:id/cancel', async (req, res) => {
   try {
