@@ -1,0 +1,463 @@
+{
+  "categories": [
+    {
+      "id": "monstruo-clasico",
+      "name": "Monstruo Clásico",
+      "description": "Nuestras hamburguesas tradicionales con sabor auténtico",
+      "image": "/images/categories/monstruo-clasico.jpg"
+    },
+    {
+      "id": "zona-sabor",
+      "name": "Zona Sabor",
+      "description": "Hamburguesas con sabores únicos y especiales",
+      "image": "/images/categories/zona-sabor.jpg"
+    },
+    {
+      "id": "combos-brutales",
+      "name": "Combos Brutales",
+      "description": "Para los más hambrientos, hamburguesas XXL",
+      "image": "/images/categories/combos-brutales.jpg"
+    },
+    {
+      "id": "bebidas",
+      "name": "Bebidas",
+      "description": "Refrescos, malteadas y bebidas frescas",
+      "image": "/images/categories/bebidas.jpg"
+    },
+    {
+      "id": "extras",
+      "name": "Extras",
+      "description": "Acompañamientos perfectos para tu hamburguesa",
+      "image": "/images/categories/extras.jpg"
+    }
+  ],
+  "items": [
+    {
+      "id": "1",
+      "name": "Monstruo Clásico",
+      "description": "Nuestra hamburguesa estrella con carne 100% res, queso cheddar, lechuga, tomate, cebolla y nuestra salsa especial.",
+      "price": 180,
+      "image": "/images/burgers/monstruo-clasico.jpg",
+      "category": "monstruo-clasico",
+      "rating": 4.9,
+      "prepTime": 12,
+      "isPopular": true,
+      "isSpicy": false,
+      "isVegetarian": false,
+      "ingredients": [
+        "Carne de res 100%",
+        "Queso cheddar",
+        "Lechuga fresca",
+        "Tomate",
+        "Cebolla morada",
+        "Salsa especial",
+        "Pan artesanal"
+      ],
+      "nutrition": {
+        "calories": 650,
+        "protein": 35,
+        "carbs": 45,
+        "fat": 38
+      },
+      "allergens": ["gluten", "lacteos"],
+      "availability": true
+    },
+    {
+      "id": "2",
+      "name": "Monstruo Doble",
+      "description": "Doble carne, doble queso, doble sabor. Para los más hambrientos.",
+      "price": 240,
+      "image": "/images/burgers/monstruo-doble.jpg",
+      "category": "monstruo-clasico",
+      "rating": 4.8,
+      "prepTime": 15,
+      "isPopular": false,
+      "isSpicy": false,
+      "isVegetarian": false,
+      "ingredients": [
+        "Doble carne de res",
+        "Doble queso cheddar",
+        "Lechuga fresca",
+        "Tomate",
+        "Cebolla morada",
+        "Salsa especial",
+        "Pan artesanal"
+      ],
+      "nutrition": {
+        "calories": 890,
+        "protein": 58,
+        "carbs": 45,
+        "fat": 56
+      },
+      "allergens": ["gluten", "lacteos"],
+      "availability": true
+    },
+    {
+      "id": "3",
+      "name": "Zona BBQ",
+      "description": "Deliciosa hamburguesa con carne ahumada, bacon crujiente, cebolla caramelizada y salsa BBQ casera.",
+      "price": 220,
+      "image": "/images/burgers/zona-bbq.jpg",
+      "category": "zona-sabor",
+      "rating": 4.8,
+      "prepTime": 15,
+      "isPopular": true,
+      "isSpicy": false,
+      "isVegetarian": false,
+      "ingredients": [
+        "Carne de res ahumada",
+        "Bacon crujiente",
+        "Cebolla caramelizada",
+        "Salsa BBQ casera",
+        "Queso gouda",
+        "Lechuga",
+        "Pan artesanal"
+      ],
+      "nutrition": {
+        "calories": 780,
+        "protein": 42,
+        "carbs": 48,
+        "fat": 45
+      },
+      "allergens": ["gluten", "lacteos"],
+      "availability": true
+    },
+    {
+      "id": "4",
+      "name": "Zona Picante",
+      "description": "Para los amantes del picante: jalapeños, salsa picante, queso pepper jack y nuestra salsa especial.",
+      "price": 200,
+      "image": "/images/burgers/zona-picante.jpg",
+      "category": "zona-sabor",
+      "rating": 4.7,
+      "prepTime": 13,
+      "isPopular": false,
+      "isSpicy": true,
+      "isVegetarian": false,
+      "ingredients": [
+        "Carne de res",
+        "Jalapeños frescos",
+        "Salsa picante",
+        "Queso pepper jack",
+        "Lechuga",
+        "Tomate",
+        "Salsa especial",
+        "Pan artesanal"
+      ],
+      "nutrition": {
+        "calories": 720,
+        "protein": 38,
+        "carbs": 46,
+        "fat": 42
+      },
+      "allergens": ["gluten", "lacteos"],
+      "availability": true
+    },
+    {
+      "id": "5",
+      "name": "Zona Mediterránea",
+      "description": "Sabor mediterráneo con queso feta, tomate seco, aceitunas y pesto de albahaca.",
+      "price": 210,
+      "image": "/images/burgers/zona-mediterranea.jpg",
+      "category": "zona-sabor",
+      "rating": 4.6,
+      "prepTime": 14,
+      "isPopular": false,
+      "isSpicy": false,
+      "isVegetarian": false,
+      "ingredients": [
+        "Carne de res",
+        "Queso feta",
+        "Tomate seco",
+        "Aceitunas negras",
+        "Pesto de albahaca",
+        "Lechuga",
+        "Pan artesanal"
+      ],
+      "nutrition": {
+        "calories": 680,
+        "protein": 36,
+        "carbs": 44,
+        "fat": 40
+      },
+      "allergens": ["gluten", "lacteos"],
+      "availability": true
+    },
+    {
+      "id": "6",
+      "name": "Brutal Doble",
+      "description": "Para los más hambrientos: doble carne, doble queso, doble sabor. Una experiencia brutal de sabor.",
+      "price": 280,
+      "image": "/images/burgers/brutal-doble.jpg",
+      "category": "combos-brutales",
+      "rating": 4.7,
+      "prepTime": 18,
+      "isPopular": true,
+      "isSpicy": false,
+      "isVegetarian": false,
+      "ingredients": [
+        "Doble carne de res",
+        "Doble queso cheddar",
+        "Bacon crujiente",
+        "Lechuga fresca",
+        "Tomate",
+        "Cebolla",
+        "Salsa especial",
+        "Pan artesanal XXL"
+      ],
+      "nutrition": {
+        "calories": 1100,
+        "protein": 68,
+        "carbs": 52,
+        "fat": 72
+      },
+      "allergens": ["gluten", "lacteos"],
+      "availability": true
+    },
+    {
+      "id": "7",
+      "name": "Brutal Triple",
+      "description": "El combo más brutal: triple carne, triple queso, triple todo. Solo para valientes.",
+      "price": 350,
+      "image": "/images/burgers/brutal-triple.jpg",
+      "category": "combos-brutales",
+      "rating": 4.5,
+      "prepTime": 20,
+      "isPopular": false,
+      "isSpicy": false,
+      "isVegetarian": false,
+      "ingredients": [
+        "Triple carne de res",
+        "Triple queso cheddar",
+        "Doble bacon",
+        "Lechuga fresca",
+        "Tomate",
+        "Cebolla",
+        "Salsa especial",
+        "Pan artesanal XXL"
+      ],
+      "nutrition": {
+        "calories": 1450,
+        "protein": 89,
+        "carbs": 55,
+        "fat": 95
+      },
+      "allergens": ["gluten", "lacteos"],
+      "availability": true
+    },
+    {
+      "id": "8",
+      "name": "Refresco 500ml",
+      "description": "Coca-Cola, Sprite, Fanta o Agua de sabor.",
+      "price": 35,
+      "image": "/images/drinks/refresco.jpg",
+      "category": "bebidas",
+      "rating": 4.0,
+      "prepTime": 2,
+      "isPopular": false,
+      "isSpicy": false,
+      "isVegetarian": true,
+      "ingredients": [
+        "Refresco de cola",
+        "Hielo"
+      ],
+      "nutrition": {
+        "calories": 200,
+        "protein": 0,
+        "carbs": 52,
+        "fat": 0
+      },
+      "allergens": [],
+      "availability": true
+    },
+    {
+      "id": "9",
+      "name": "Malteada de Vainilla",
+      "description": "Cremosa malteada de vainilla con topping de crema batida.",
+      "price": 65,
+      "image": "/images/drinks/malteada-vainilla.jpg",
+      "category": "bebidas",
+      "rating": 4.5,
+      "prepTime": 5,
+      "isPopular": true,
+      "isSpicy": false,
+      "isVegetarian": true,
+      "ingredients": [
+        "Leche entera",
+        "Helado de vainilla",
+        "Crema batida",
+        "Sirope de vainilla",
+        "Cereza"
+      ],
+      "nutrition": {
+        "calories": 450,
+        "protein": 12,
+        "carbs": 58,
+        "fat": 18
+      },
+      "allergens": ["lacteos"],
+      "availability": true
+    },
+    {
+      "id": "10",
+      "name": "Agua Fresca",
+      "description": "Agua fresca de jamaica, horchata o limón.",
+      "price": 25,
+      "image": "/images/drinks/agua-fresca.jpg",
+      "category": "bebidas",
+      "rating": 4.2,
+      "prepTime": 3,
+      "isPopular": false,
+      "isSpicy": false,
+      "isVegetarian": true,
+      "ingredients": [
+        "Agua purificada",
+        "Fruta natural",
+        "Azúcar",
+        "Hielo"
+      ],
+      "nutrition": {
+        "calories": 120,
+        "protein": 0,
+        "carbs": 30,
+        "fat": 0
+      },
+      "allergens": [],
+      "availability": true
+    },
+    {
+      "id": "11",
+      "name": "Papas Fritas",
+      "description": "Papas fritas doradas y crujientes, perfectas para acompañar tu hamburguesa.",
+      "price": 45,
+      "image": "/images/extras/papas-fritas.jpg",
+      "category": "extras",
+      "rating": 4.3,
+      "prepTime": 8,
+      "isPopular": true,
+      "isSpicy": false,
+      "isVegetarian": true,
+      "ingredients": [
+        "Papas frescas",
+        "Aceite vegetal",
+        "Sal marina",
+        "Especias"
+      ],
+      "nutrition": {
+        "calories": 320,
+        "protein": 4,
+        "carbs": 38,
+        "fat": 16
+      },
+      "allergens": [],
+      "availability": true
+    },
+    {
+      "id": "12",
+      "name": "Aros de Cebolla",
+      "description": "Aros de cebolla empanizados y fritos hasta quedar dorados.",
+      "price": 55,
+      "image": "/images/extras/aros-cebolla.jpg",
+      "category": "extras",
+      "rating": 4.4,
+      "prepTime": 10,
+      "isPopular": false,
+      "isSpicy": false,
+      "isVegetarian": true,
+      "ingredients": [
+        "Cebolla fresca",
+        "Harina",
+        "Huevo",
+        "Pan molido",
+        "Especias"
+      ],
+      "nutrition": {
+        "calories": 280,
+        "protein": 6,
+        "carbs": 32,
+        "fat": 14
+      },
+      "allergens": ["gluten", "huevo"],
+      "availability": true
+    },
+    {
+      "id": "13",
+      "name": "Nuggets de Pollo",
+      "description": "Tiernos nuggets de pollo empanizados, crujientes por fuera y jugosos por dentro.",
+      "price": 75,
+      "image": "/images/extras/nuggets-pollo.jpg",
+      "category": "extras",
+      "rating": 4.6,
+      "prepTime": 12,
+      "isPopular": false,
+      "isSpicy": false,
+      "isVegetarian": false,
+      "ingredients": [
+        "Pechuga de pollo",
+        "Harina",
+        "Huevo",
+        "Pan molido",
+        "Especias"
+      ],
+      "nutrition": {
+        "calories": 380,
+        "protein": 22,
+        "carbs": 28,
+        "fat": 18
+      },
+      "allergens": ["gluten", "huevo"],
+      "availability": true
+    }
+  ],
+  "combos": [
+    {
+      "id": "combo-1",
+      "name": "Combo Monstruo",
+      "description": "Monstruo Clásico + Papas Fritas + Refresco",
+      "price": 220,
+      "originalPrice": 260,
+      "savings": 40,
+      "items": [
+        {
+          "itemId": "1",
+          "quantity": 1
+        },
+        {
+          "itemId": "11",
+          "quantity": 1
+        },
+        {
+          "itemId": "8",
+          "quantity": 1
+        }
+      ],
+      "image": "/images/combos/combo-monstruo.jpg",
+      "isPopular": true
+    },
+    {
+      "id": "combo-2",
+      "name": "Combo Brutal",
+      "description": "Brutal Doble + Aros de Cebolla + Malteada",
+      "price": 350,
+      "originalPrice": 400,
+      "savings": 50,
+      "items": [
+        {
+          "itemId": "6",
+          "quantity": 1
+        },
+        {
+          "itemId": "12",
+          "quantity": 1
+        },
+        {
+          "itemId": "9",
+          "quantity": 1
+        }
+      ],
+      "image": "/images/combos/combo-brutal.jpg",
+      "isPopular": false
+    }
+  ]
+}
+

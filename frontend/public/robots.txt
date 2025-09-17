@@ -1,0 +1,21 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://lahamburguezona.com/sitemap.xml
+
+# Disallow admin areas
+Disallow: /admin/
+Disallow: /api/
+Disallow: /_next/
+Disallow: /uploads/
+
+# Allow important pages
+Allow: /
+Allow: /menu
+Allow: /pedidos
+Allow: /galeria
+Allow: /contacto
+Allow: /opiniones
+Allow: /nosotros
+

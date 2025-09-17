@@ -1,0 +1,177 @@
+{
+  "categories": [
+    {
+      "id": "monstruo-clasico",
+      "name": "Monstruo Clásico",
+      "description": "Nuestras hamburguesas tradicionales",
+      "icon": "🍔"
+    },
+    {
+      "id": "zona-sabor",
+      "name": "Zona Sabor",
+      "description": "Hamburguesas con sabores únicos",
+      "icon": "🌶️"
+    },
+    {
+      "id": "combos-brutales",
+      "name": "Combos Brutales",
+      "description": "Hamburguesas con papas y bebida",
+      "icon": "⚡"
+    },
+    {
+      "id": "bebidas",
+      "name": "Bebidas",
+      "description": "Refrescantes bebidas",
+      "icon": "🥤"
+    },
+    {
+      "id": "extras",
+      "name": "Extras",
+      "description": "Complementos deliciosos",
+      "icon": "🍟"
+    }
+  ],
+  "items": [
+    {
+      "id": "1",
+      "name": "Monstruo Clásico",
+      "description": "Hamburguesa con carne 100% res, queso cheddar, lechuga, tomate, cebolla y nuestra salsa especial.",
+      "price": 180,
+      "image": "/images/burgers/monstruo-clasico.jpg",
+      "category": "monstruo-clasico",
+      "rating": 4.9,
+      "prepTime": 12,
+      "isPopular": true,
+      "isSpicy": false,
+      "isVegetarian": false,
+      "ingredients": ["Carne de res", "Queso cheddar", "Lechuga", "Tomate", "Cebolla", "Salsa especial"]
+    },
+    {
+      "id": "2",
+      "name": "Zona BBQ",
+      "description": "Deliciosa hamburguesa con carne ahumada, bacon crujiente, cebolla caramelizada y salsa BBQ casera.",
+      "price": 220,
+      "image": "/images/burgers/zona-bbq.jpg",
+      "category": "zona-sabor",
+      "rating": 4.8,
+      "prepTime": 15,
+      "isPopular": true,
+      "isSpicy": false,
+      "isVegetarian": false,
+      "ingredients": ["Carne ahumada", "Bacon", "Cebolla caramelizada", "Salsa BBQ", "Queso gouda"]
+    },
+    {
+      "id": "3",
+      "name": "Monstruo Picante",
+      "description": "Para los valientes: carne de res, jalapeños, queso pepper jack, salsa picante y cebolla morada.",
+      "price": 200,
+      "image": "/images/burgers/monstruo-picante.jpg",
+      "category": "monstruo-clasico",
+      "rating": 4.7,
+      "prepTime": 13,
+      "isPopular": false,
+      "isSpicy": true,
+      "isVegetarian": false,
+      "ingredients": ["Carne de res", "Jalapeños", "Queso pepper jack", "Salsa picante", "Cebolla morada"]
+    },
+    {
+      "id": "4",
+      "name": "Zona Hawaiana",
+      "description": "Exótica combinación con piña asada, jamón, queso suizo y salsa teriyaki.",
+      "price": 240,
+      "image": "/images/burgers/zona-hawaiana.jpg",
+      "category": "zona-sabor",
+      "rating": 4.6,
+      "prepTime": 16,
+      "isPopular": false,
+      "isSpicy": false,
+      "isVegetarian": false,
+      "ingredients": ["Carne de res", "Piña asada", "Jamón", "Queso suizo", "Salsa teriyaki"]
+    },
+    {
+      "id": "5",
+      "name": "Combo Monstruo",
+      "description": "Monstruo Clásico + Papas deluxe + Bebida de 500ml",
+      "price": 280,
+      "image": "/images/combos/combo-monstruo.jpg",
+      "category": "combos-brutales",
+      "rating": 4.9,
+      "prepTime": 15,
+      "isPopular": true,
+      "isSpicy": false,
+      "isVegetarian": false,
+      "ingredients": ["Hamburguesa Monstruo Clásico", "Papas deluxe", "Bebida 500ml"]
+    },
+    {
+      "id": "6",
+      "name": "Combo Zona",
+      "description": "Zona BBQ + Papas deluxe + Bebida de 500ml",
+      "price": 320,
+      "image": "/images/combos/combo-zona.jpg",
+      "category": "combos-brutales",
+      "rating": 4.8,
+      "prepTime": 18,
+      "isPopular": true,
+      "isSpicy": false,
+      "isVegetarian": false,
+      "ingredients": ["Hamburguesa Zona BBQ", "Papas deluxe", "Bebida 500ml"]
+    },
+    {
+      "id": "7",
+      "name": "Coca-Cola",
+      "description": "Refrescante Coca-Cola de 500ml",
+      "price": 35,
+      "image": "/images/drinks/coca-cola.jpg",
+      "category": "bebidas",
+      "rating": 4.5,
+      "prepTime": 1,
+      "isPopular": true,
+      "isSpicy": false,
+      "isVegetarian": true,
+      "ingredients": ["Coca-Cola"]
+    },
+    {
+      "id": "8",
+      "name": "Agua Natural",
+      "description": "Agua purificada de 500ml",
+      "price": 25,
+      "image": "/images/drinks/agua-natural.jpg",
+      "category": "bebidas",
+      "rating": 4.3,
+      "prepTime": 1,
+      "isPopular": false,
+      "isSpicy": false,
+      "isVegetarian": true,
+      "ingredients": ["Agua purificada"]
+    },
+    {
+      "id": "9",
+      "name": "Papas Deluxe",
+      "description": "Papas fritas crujientes con sal marina y especias especiales",
+      "price": 80,
+      "image": "/images/extras/papas-deluxe.jpg",
+      "category": "extras",
+      "rating": 4.6,
+      "prepTime": 8,
+      "isPopular": true,
+      "isSpicy": false,
+      "isVegetarian": true,
+      "ingredients": ["Papas", "Sal marina", "Especias especiales"]
+    },
+    {
+      "id": "10",
+      "name": "Aros de Cebolla",
+      "description": "Aros de cebolla empanizados y fritos hasta el punto perfecto",
+      "price": 90,
+      "image": "/images/extras/aros-cebolla.jpg",
+      "category": "extras",
+      "rating": 4.4,
+      "prepTime": 10,
+      "isPopular": false,
+      "isSpicy": false,
+      "isVegetarian": true,
+      "ingredients": ["Cebolla", "Harina", "Huevo", "Pan molido"]
+    }
+  ]
+}
+
