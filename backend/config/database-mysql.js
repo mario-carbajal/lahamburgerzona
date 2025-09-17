@@ -75,9 +75,20 @@ const initializeDatabase = async () => {
         customer_phone VARCHAR(20) NOT NULL,
         customer_email VARCHAR(255),
         delivery_address TEXT NOT NULL,
+        delivery_instructions TEXT,
+        payment_method VARCHAR(50) DEFAULT 'cash',
+        payment_status VARCHAR(50) DEFAULT 'pending',
+        subtotal DECIMAL(10,2) NOT NULL DEFAULT 0,
+        delivery_fee DECIMAL(10,2) DEFAULT 0,
+        tax DECIMAL(10,2) DEFAULT 0,
         total_amount DECIMAL(10,2) NOT NULL,
         status VARCHAR(50) DEFAULT 'pending',
+        estimated_delivery_time TIMESTAMP NULL,
+        actual_delivery_time TIMESTAMP NULL,
         notes TEXT,
+        status_notes TEXT,
+        cancelled_at TIMESTAMP NULL,
+        cancellation_reason TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -88,11 +99,26 @@ const initializeDatabase = async () => {
         id INT AUTO_INCREMENT PRIMARY KEY,
         order_id INT NOT NULL,
         menu_item_id INT,
+        menu_item_name VARCHAR(255) NOT NULL,
         quantity INT NOT NULL,
-        price DECIMAL(10,2) NOT NULL,
+        unit_price DECIMAL(10,2) NOT NULL,
+        total_price DECIMAL(10,2) NOT NULL,
+        special_instructions TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
         FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS order_status_history (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        order_id INT NOT NULL,
+        status VARCHAR(50) NOT NULL,
+        notes TEXT,
+        changed_by VARCHAR(100),
+        changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
