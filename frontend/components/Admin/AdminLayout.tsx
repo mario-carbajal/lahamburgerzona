@@ -44,10 +44,26 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Mobile menu button */}
+      <button
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        className="fixed top-4 left-4 z-50 bg-white p-2 rounded-md shadow-md hover:bg-gray-50 transition-colors"
+      >
+        {isSidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+      </button>
+
+      {/* Overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out ${
         isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      } lg:translate-x-0`}>
+      }`}>
         <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 bg-gradient-warm rounded-full flex items-center justify-center">
@@ -55,12 +71,18 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             </div>
             <span className="text-xl font-bold text-gray-900">Admin</span>
           </div>
-          <button
-            onClick={() => setIsSidebarOpen(false)}
-            className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-600"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center space-x-2">
+            {/* Toggle button - visible when sidebar is open */}
+            {isSidebarOpen && (
+              <button
+                onClick={() => setIsSidebarOpen(false)}
+                className="p-2 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                title="Ocultar menú"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
         </div>
 
         <nav className="mt-8 px-4">
@@ -98,21 +120,17 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       </div>
 
       {/* Main content */}
-      <div className="lg:ml-64">
+      <div className="transition-all duration-300 ease-in-out">
         {/* Top bar */}
         <header className="bg-white shadow-sm border-b border-gray-200">
           <div className="flex items-center justify-between h-16 px-6">
-            <button
-              onClick={() => setIsSidebarOpen(true)}
-              className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-600"
-            >
-              <Menu className="w-6 h-6" />
-            </button>
-
             <div className="flex items-center space-x-4">
               <div className="text-sm text-gray-600">
                 Bienvenido, <span className="font-semibold text-gray-900">Administrador</span>
               </div>
+            </div>
+
+            <div className="flex items-center space-x-4">
               <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
             </div>
           </div>

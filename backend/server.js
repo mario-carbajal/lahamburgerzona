@@ -49,6 +49,8 @@ app.use('/uploads', (req, res, next) => {
 // Routes
 app.use('/api/menu', require('./routes/menu'));
 app.use('/api/orders', require('./routes/orders'));
+app.use('/api/customers', require('./routes/customers'));
+app.use('/api/reports', require('./routes/reports'));
 app.use('/api/reviews', require('./routes/reviews'));
 app.use('/api/contact', require('./routes/contact'));
 app.use('/api/auth', require('./routes/auth'));
@@ -541,6 +543,7 @@ app.get('/', (req, res) => {
     endpoints: {
       menu: '/api/menu',
       orders: '/api/orders',
+      customers: '/api/customers',
       reviews: '/api/reviews',
       contact: '/api/contact',
       health: '/api/health'
@@ -727,7 +730,7 @@ const startServer = async () => {
       console.log(`🍔 La Hamburguezona API corriendo en puerto ${PORT}`);
       console.log(`📊 Ambiente: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
-      console.log(`🗄️  Base de datos: PostgreSQL conectada`);
+      console.log(`🗄️  Base de datos: MySQL conectada`);
     });
   } catch (error) {
     console.error('❌ Error al iniciar el servidor:', error);

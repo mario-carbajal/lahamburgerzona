@@ -3,6 +3,7 @@ import Head from 'next/head';
 import { Plus, Edit, Trash2, Eye, EyeOff, Upload, Image as ImageIcon } from 'lucide-react';
 import apiService from '../../services/api';
 import ImageUpload from '../../components/UI/ImageUpload';
+import AdminLayout from '../../components/Admin/AdminLayout';
 
 interface HeroImage {
   id: string;
@@ -155,7 +156,7 @@ const HeroManagementPage = () => {
 
   if (isLoading) {
     return (
-      <>
+      <AdminLayout>
         <Head>
           <title>Gestión de Hero - La Hamburguezona Admin</title>
         </Head>
@@ -165,17 +166,17 @@ const HeroManagementPage = () => {
             <p className="mt-4 text-gray-600">Cargando imágenes hero...</p>
           </div>
         </div>
-      </>
+      </AdminLayout>
     );
   }
 
   return (
-    <>
+    <AdminLayout>
       <Head>
         <title>Gestión de Hero - La Hamburguezona Admin</title>
       </Head>
 
-      <div className="container mx-auto px-4 py-8">
+      <div className="space-y-6">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
@@ -507,7 +508,7 @@ const HeroManagementPage = () => {
           </div>
         </div>
       )}
-    </>
+    </AdminLayout>
   );
 };
 
