@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const { executeQuery } = require('../config/database-mysql');
+const jwt = require('jsonwebtoken');
 
 // Funciones auxiliares para obtener etiqueta y color de status
 const getStatusLabel = (status) => {
@@ -28,22 +29,32 @@ const getStatusColor = (status) => {
   return statusColors[status] || 'bg-gray-100 text-gray-800';
 };
 
-// Middleware de autenticación administrativa
-const adminAuth = (req, res, next) => {
-  const adminToken = req.headers.authorization;
-  
-  if (!adminToken || (adminToken !== 'Bearer admin-token' && adminToken !== 'Bearer dummy-admin-token')) {
+// Middleware de autenticación JWT
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
     return res.status(401).json({
       success: false,
-      message: 'Acceso no autorizado'
+      message: 'Token de acceso requerido'
     });
   }
-  
-  next();
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({
+        success: false,
+        message: 'Token inválido'
+      });
+    }
+    req.user = user;
+    next();
+  });
 };
 
 // GET /api/customers - Obtener todos los clientes (admin)
-router.get('/', adminAuth, async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const { search, status, limit = 50, offset = 0, sort = 'name', order = 'ASC' } = req.query;
     
@@ -124,7 +135,7 @@ router.get('/', adminAuth, async (req, res) => {
 });
 
 // GET /api/customers/:id - Obtener cliente específico
-router.get('/:id', adminAuth, async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -173,7 +184,7 @@ router.get('/:id', adminAuth, async (req, res) => {
 });
 
 // GET /api/customers/:id/orders - Obtener historial detallado de pedidos del cliente
-router.get('/:id/orders', adminAuth, async (req, res) => {
+router.get('/:id/orders', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -282,7 +293,7 @@ router.get('/:id/orders', adminAuth, async (req, res) => {
 });
 
 // POST /api/customers - Crear nuevo cliente
-router.post('/', adminAuth, [
+router.post('/', authenticateToken, [
   body('name').notEmpty().withMessage('El nombre es requerido'),
   body('email').isEmail().withMessage('Email inválido'),
   body('phone').notEmpty().withMessage('El teléfono es requerido'),
@@ -340,7 +351,7 @@ router.post('/', adminAuth, [
 });
 
 // PUT /api/customers/:id - Actualizar cliente
-router.put('/:id', adminAuth, [
+router.put('/:id', authenticateToken, [
   body('name').optional().notEmpty().withMessage('El nombre no puede estar vacío'),
   body('email').optional().isEmail().withMessage('Email inválido'),
   body('phone').optional().notEmpty().withMessage('El teléfono no puede estar vacío'),
@@ -431,7 +442,7 @@ router.put('/:id', adminAuth, [
 });
 
 // DELETE /api/customers/:id - Eliminar cliente
-router.delete('/:id', adminAuth, async (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -479,7 +490,7 @@ router.delete('/:id', adminAuth, async (req, res) => {
 });
 
 // GET /api/customers/stats/overview - Obtener estadísticas generales de clientes
-router.get('/stats/overview', adminAuth, async (req, res) => {
+router.get('/stats/overview', authenticateToken, async (req, res) => {
   try {
     const stats = await executeQuery(`
       SELECT 
@@ -499,6 +510,113 @@ router.get('/stats/overview', adminAuth, async (req, res) => {
     
   } catch (error) {
     console.error('Error fetching customer stats:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor'
+    });
+  }
+});
+
+// GET /api/customers/check-email/:email - Verificar si un email ya existe (público)
+router.get('/check-email/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    
+    // Validar formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Formato de email inválido'
+      });
+    }
+    
+    const customer = await executeQuery(
+      'SELECT id FROM customers WHERE email = ?',
+      [email]
+    );
+    
+    if (customer.length > 0) {
+      res.json({
+        success: true,
+        exists: true,
+        message: 'Email ya registrado'
+      });
+    } else {
+      res.json({
+        success: true,
+        exists: false,
+        message: 'Email disponible'
+      });
+    }
+    
+  } catch (error) {
+    console.error('Error checking email:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor'
+    });
+  }
+});
+
+// POST /api/customers/verify - Verificar datos de usuario existente (público)
+router.post('/verify', async (req, res) => {
+  try {
+    const { email, name } = req.body;
+    
+    // Validar formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Formato de email inválido'
+      });
+    }
+    
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'El nombre es requerido'
+      });
+    }
+    
+    const customer = await executeQuery(
+      'SELECT id, name, phone, address FROM customers WHERE email = ?',
+      [email]
+    );
+    
+    if (customer.length > 0) {
+      // Verificar que el nombre coincida (case insensitive)
+      if (customer[0].name.toLowerCase().trim() === name.toLowerCase().trim()) {
+        res.json({
+          success: true,
+          verified: true,
+          message: 'Datos verificados correctamente',
+          data: {
+            id: customer[0].id,
+            name: customer[0].name,
+            email: email,
+            phone: customer[0].phone,
+            address: customer[0].address
+          }
+        });
+      } else {
+        res.json({
+          success: false,
+          verified: false,
+          message: 'El nombre no coincide con el registrado'
+        });
+      }
+    } else {
+      res.json({
+        success: false,
+        verified: false,
+        message: 'Email no encontrado'
+      });
+    }
+    
+  } catch (error) {
+    console.error('Error verifying customer:', error);
     res.status(500).json({
       success: false,
       error: 'Error interno del servidor'

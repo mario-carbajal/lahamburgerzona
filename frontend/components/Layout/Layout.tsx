@@ -3,6 +3,7 @@ import Head from 'next/head';
 import Header from './Header';
 import Footer from './Footer';
 import { Toaster } from 'react-hot-toast';
+import SessionGuard from '../SessionGuard';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -45,13 +46,15 @@ const Layout: React.FC<LayoutProps> = ({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </Head>
       
-      <div className="min-h-screen flex flex-col">
-        <Header />
-        <main className="flex-grow">
-          {children}
-        </main>
-        <Footer />
-      </div>
+      <SessionGuard>
+        <div className="min-h-screen flex flex-col">
+          <Header />
+          <main className="flex-grow">
+            {children}
+          </main>
+          <Footer />
+        </div>
+      </SessionGuard>
       
       <Toaster
         position="top-right"

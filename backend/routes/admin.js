@@ -1,25 +1,35 @@
 const express = require('express');
 const router = express.Router();
 const { executeQuery } = require('../config/database-mysql');
+const jwt = require('jsonwebtoken');
 
-// Middleware de autenticación administrativa (simple para desarrollo)
-const adminAuth = (req, res, next) => {
-  // TODO: Implementar autenticación real con JWT
-  const adminToken = req.headers.authorization;
-  
-  // Para desarrollo, aceptar tanto el token dummy como el token real
-  if (!adminToken || (adminToken !== 'Bearer admin-token' && adminToken !== 'Bearer dummy-admin-token')) {
+// Middleware de autenticación JWT
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
     return res.status(401).json({
       success: false,
-      message: 'Acceso no autorizado'
+      message: 'Token de acceso requerido'
     });
   }
-  
-  next();
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({
+        success: false,
+        message: 'Token inválido'
+      });
+    }
+    req.user = user;
+    next();
+  });
 };
 
+
 // Dashboard - Estadísticas generales
-router.get('/dashboard', adminAuth, (req, res) => {
+router.get('/dashboard', authenticateToken, (req, res) => {
   try {
     const stats = {
       totalOrders: 1247,
@@ -63,7 +73,7 @@ router.get('/dashboard', adminAuth, (req, res) => {
 });
 
 // Obtener todos los pedidos
-router.get('/orders', adminAuth, (req, res) => {
+router.get('/orders', authenticateToken, (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
     
@@ -129,7 +139,7 @@ router.get('/orders', adminAuth, (req, res) => {
 });
 
 // Actualizar estado de pedido
-router.put('/orders/:id/status', adminAuth, (req, res) => {
+router.put('/orders/:id/status', authenticateToken, (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -159,60 +169,63 @@ router.put('/orders/:id/status', adminAuth, (req, res) => {
 });
 
 // Obtener todos los productos del menú
-router.get('/menu', adminAuth, (req, res) => {
+router.get('/menu', authenticateToken, async (req, res) => {
   try {
     const { category, active } = req.query;
     
-    // TODO: Implementar filtros reales
-    const menuItems = [
-      {
-        id: '1',
-        name: 'Monstruo Clásico',
-        description: 'Nuestra hamburguesa estrella con carne 100% res, queso cheddar, lechuga, tomate, cebolla y nuestra salsa especial.',
-        price: 180,
-        image: '/images/burgers/monstruo-clasico.jpg',
-        category: 'Monstruo Clásico',
-        rating: 4.9,
-        prepTime: 12,
-        isPopular: true,
-        isActive: true,
-        ingredients: ['Carne de res', 'Queso cheddar', 'Lechuga', 'Tomate', 'Cebolla', 'Salsa especial'],
-        createdAt: '2025-09-01T00:00:00Z',
-        updatedAt: '2025-09-16T00:00:00Z'
-      },
-      {
-        id: '2',
-        name: 'Zona BBQ',
-        description: 'Deliciosa hamburguesa con carne ahumada, bacon crujiente, cebolla caramelizada y salsa BBQ casera.',
-        price: 220,
-        image: '/images/burgers/zona-bbq.jpg',
-        category: 'Zona Sabor',
-        rating: 4.8,
-        prepTime: 15,
-        isActive: true,
-        ingredients: ['Carne ahumada', 'Bacon', 'Cebolla caramelizada', 'Salsa BBQ', 'Queso gouda'],
-        createdAt: '2025-09-01T00:00:00Z',
-        updatedAt: '2025-09-16T00:00:00Z'
-      }
-    ];
-
-    let filteredItems = menuItems;
+    let query = 'SELECT * FROM menu_items WHERE 1=1';
+    const params = [];
+    
     if (category && category !== 'all') {
-      filteredItems = menuItems.filter(item => item.category === category);
+      query += ' AND category = ?';
+      params.push(category);
     }
     if (active !== undefined) {
       const isActive = active === 'true';
-      filteredItems = filteredItems.filter(item => item.isActive === isActive);
+      query += ' AND is_active = ?';
+      params.push(isActive);
     }
+    
+    query += ' ORDER BY created_at DESC';
+    
+    const menuItems = await executeQuery(query, params);
+    
+    // Formatear los datos para que coincidan con la estructura esperada
+    const formattedItems = menuItems.map(item => {
+      let ingredients = [];
+      try {
+        ingredients = item.ingredients ? JSON.parse(item.ingredients) : [];
+      } catch (e) {
+        console.log('Error parsing ingredients for item', item.id, ':', e.message);
+        ingredients = [];
+      }
+      
+      return {
+        id: item.id.toString(),
+        name: item.name,
+        description: item.description || '',
+        price: parseFloat(item.price),
+        image: item.image || '/images/placeholder-burger.jpg',
+        category: item.category,
+        rating: parseFloat(item.rating || 0),
+        prepTime: parseInt(item.prep_time || 0),
+        isPopular: Boolean(item.is_popular),
+        isActive: Boolean(item.is_active),
+        ingredients: ingredients,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at
+      };
+    });
 
     res.json({
       success: true,
       data: {
-        items: filteredItems,
-        total: filteredItems.length
+        items: formattedItems,
+        total: formattedItems.length
       }
     });
   } catch (error) {
+    console.error('Error al obtener productos del menú:', error);
     res.status(500).json({
       success: false,
       message: 'Error al obtener productos del menú'
@@ -221,7 +234,7 @@ router.get('/menu', adminAuth, (req, res) => {
 });
 
 // Crear nuevo producto
-router.post('/menu', adminAuth, (req, res) => {
+router.post('/menu', authenticateToken, (req, res) => {
   try {
     const {
       name,
@@ -275,7 +288,7 @@ router.post('/menu', adminAuth, (req, res) => {
 });
 
 // Actualizar producto
-router.put('/menu/:id', adminAuth, (req, res) => {
+router.put('/menu/:id', authenticateToken, (req, res) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
@@ -299,7 +312,7 @@ router.put('/menu/:id', adminAuth, (req, res) => {
 });
 
 // Eliminar producto
-router.delete('/menu/:id', adminAuth, (req, res) => {
+router.delete('/menu/:id', authenticateToken, (req, res) => {
   try {
     const { id } = req.params;
 
@@ -317,7 +330,7 @@ router.delete('/menu/:id', adminAuth, (req, res) => {
 });
 
 // Obtener reseñas
-router.get('/reviews', adminAuth, (req, res) => {
+router.get('/reviews', authenticateToken, (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
     
@@ -368,7 +381,7 @@ router.get('/reviews', adminAuth, (req, res) => {
 });
 
 // Actualizar estado de reseña
-router.put('/reviews/:id/status', adminAuth, (req, res) => {
+router.put('/reviews/:id/status', authenticateToken, (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -398,7 +411,7 @@ router.put('/reviews/:id/status', adminAuth, (req, res) => {
 });
 
 // Obtener clientes
-router.get('/customers', adminAuth, (req, res) => {
+router.get('/customers', authenticateToken, (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
     
@@ -444,7 +457,7 @@ router.get('/customers', adminAuth, (req, res) => {
 });
 
 // Obtener reportes
-router.get('/reports', adminAuth, (req, res) => {
+router.get('/reports', authenticateToken, (req, res) => {
   try {
     const { type, period = 'month' } = req.query;
     
@@ -493,7 +506,7 @@ router.get('/reports', adminAuth, (req, res) => {
 });
 
 // Configuración - Obtener todas las configuraciones
-router.get('/settings', adminAuth, async (req, res) => {
+router.get('/settings', authenticateToken, async (req, res) => {
   try {
     const settings = await executeQuery('SELECT setting_key, setting_value FROM settings');
     
@@ -565,7 +578,7 @@ router.get('/settings', adminAuth, async (req, res) => {
 });
 
 // Configuración - Guardar configuración
-router.put('/settings', adminAuth, async (req, res) => {
+router.put('/settings', authenticateToken, async (req, res) => {
   try {
     const { settings } = req.body;
 

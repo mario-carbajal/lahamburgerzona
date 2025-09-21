@@ -1,21 +1,30 @@
 const express = require('express');
 const router = express.Router();
 const { executeQuery } = require('../config/database-mysql');
+const jwt = require('jsonwebtoken');
 
-// Middleware de autenticación administrativa (mismo que admin.js)
-const adminAuth = (req, res, next) => {
-  // TODO: Implementar autenticación real con JWT
-  const adminToken = req.headers.authorization;
-  
-  // Para desarrollo, aceptar tanto el token dummy como el token real
-  if (!adminToken || (adminToken !== 'Bearer admin-token' && adminToken !== 'Bearer dummy-admin-token')) {
+// Middleware de autenticación JWT
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
     return res.status(401).json({
       success: false,
-      message: 'Acceso no autorizado'
+      message: 'Token de acceso requerido'
     });
   }
-  
-  next();
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({
+        success: false,
+        message: 'Token inválido'
+      });
+    }
+    req.user = user;
+    next();
+  });
 };
 
 // GET /api/hero - Obtener todas las imágenes hero activas
@@ -55,7 +64,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/hero/admin/all - Obtener todas las imágenes hero (incluye inactivas) - Solo admin
-router.get('/admin/all', adminAuth, async (req, res) => {
+router.get('/admin/all', authenticateToken, async (req, res) => {
   try {
     const query = `
       SELECT * FROM hero_images 
@@ -90,7 +99,7 @@ router.get('/admin/all', adminAuth, async (req, res) => {
 });
 
 // POST /api/hero/admin - Crear nueva imagen hero - Solo admin
-router.post('/admin', adminAuth, async (req, res) => {
+router.post('/admin', authenticateToken, async (req, res) => {
   try {
     const { title, subtitle, description, imageUrl, ctaText, ctaLink, isActive, sortOrder } = req.body;
 
@@ -168,7 +177,7 @@ router.post('/admin', adminAuth, async (req, res) => {
 });
 
 // PUT /api/hero/admin/:id - Actualizar imagen hero - Solo admin
-router.put('/admin/:id', adminAuth, async (req, res) => {
+router.put('/admin/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { title, subtitle, description, imageUrl, ctaText, ctaLink, isActive, sortOrder } = req.body;
@@ -224,7 +233,7 @@ router.put('/admin/:id', adminAuth, async (req, res) => {
 });
 
 // DELETE /api/hero/admin/:id - Eliminar imagen hero - Solo admin
-router.delete('/admin/:id', adminAuth, async (req, res) => {
+router.delete('/admin/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -251,7 +260,7 @@ router.delete('/admin/:id', adminAuth, async (req, res) => {
 });
 
 // PUT /api/hero/admin/:id/toggle - Alternar estado activo/inactivo - Solo admin
-router.put('/admin/:id/toggle', adminAuth, async (req, res) => {
+router.put('/admin/:id/toggle', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 

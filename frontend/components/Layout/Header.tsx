@@ -78,13 +78,28 @@ const Header = () => {
             </div>
           </div>
 
-          {/* Mobile menu button */}
-          <button
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="lg:hidden p-2 rounded-md text-gray-700 hover:text-primary-500"
-          >
-            {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
+          {/* Mobile Cart and Menu */}
+          <div className="lg:hidden flex items-center space-x-3">
+            {/* Mobile Cart Button */}
+            <Link href="/pedidos" className="relative">
+              <button className="bg-primary-500 hover:bg-primary-600 text-white p-2 rounded-full shadow-lg transition-all duration-200">
+                <ShoppingCart className="w-5 h-5" />
+                {cartItems > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-secondary-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                    {cartItems}
+                  </span>
+                )}
+              </button>
+            </Link>
+            
+            {/* Mobile menu button */}
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="p-2 rounded-md text-gray-700 hover:text-primary-500"
+            >
+              {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Navigation */}
@@ -113,10 +128,15 @@ const Header = () => {
                       <Settings className="w-5 h-5" />
                     </Link>
                     
-                    <Link href="/pedidos">
-                      <button className="btn-primary flex items-center space-x-2">
+                    {/* Mobile Cart Button - Same style as header */}
+                    <Link href="/pedidos" className="relative">
+                      <button className="bg-primary-500 hover:bg-primary-600 text-white p-2 rounded-full shadow-lg transition-all duration-200">
                         <ShoppingCart className="w-5 h-5" />
-                        <span>Carrito ({cartItems})</span>
+                        {cartItems > 0 && (
+                          <span className="absolute -top-1 -right-1 bg-secondary-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                            {cartItems}
+                          </span>
+                        )}
                       </button>
                     </Link>
                   </div>

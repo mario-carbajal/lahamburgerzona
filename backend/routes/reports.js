@@ -1,23 +1,35 @@
 const express = require('express');
 const router = express.Router();
 const { executeQuery } = require('../config/database-mysql');
+const jwt = require('jsonwebtoken');
 
-// Middleware de autenticación administrativa
-const adminAuth = (req, res, next) => {
-  const adminToken = req.headers.authorization;
-  
-  if (!adminToken || (adminToken !== 'Bearer admin-token' && adminToken !== 'Bearer dummy-admin-token')) {
+// Middleware de autenticación JWT
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
     return res.status(401).json({
       success: false,
-      message: 'Acceso no autorizado'
+      message: 'Token de acceso requerido'
     });
   }
-  
-  next();
+
+  jwt.verify(token, process.env.JWT_SECRET || 'admin-secret-key', (err, user) => {
+    if (err) {
+      return res.status(403).json({
+        success: false,
+        message: 'Token inválido'
+      });
+    }
+    req.user = user;
+    next();
+  });
 };
 
+
 // GET /api/reports/dashboard - Estadísticas generales del dashboard
-router.get('/dashboard', adminAuth, async (req, res) => {
+router.get('/dashboard', authenticateToken, async (req, res) => {
   try {
     console.log('Generando reportes del dashboard...');
     
@@ -77,30 +89,29 @@ router.get('/dashboard', adminAuth, async (req, res) => {
       ORDER BY revenue DESC
     `);
 
-    // Obtener ventas por día de la última semana
+    // Obtener ventas por día de la última semana (incluyendo todos los pedidos para mostrar datos)
     const weeklySales = await executeQuery(`
       SELECT 
         DATE(created_at) as date,
         COUNT(*) as orders_count,
-        COALESCE(SUM(total_amount), 0) as revenue
+        COALESCE(SUM(CASE WHEN status != 'cancelled' THEN total_amount END), 0) as revenue,
+        COUNT(CASE WHEN status = 'delivered' THEN 1 END) as delivered_orders
       FROM orders
-      WHERE status = 'delivered' 
-        AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+      WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
       GROUP BY DATE(created_at)
       ORDER BY date ASC
     `);
 
-    // Obtener productos más vendidos
+    // Obtener productos más vendidos (incluyendo todos los pedidos para mostrar datos)
     const topProducts = await executeQuery(`
       SELECT 
         mi.name,
         mi.category,
         SUM(oi.quantity) as total_sold,
-        COALESCE(SUM(oi.quantity * oi.price), 0) as revenue
+        COALESCE(SUM(CASE WHEN o.status != 'cancelled' THEN oi.quantity * oi.price END), 0) as revenue
       FROM order_items oi
       JOIN menu_items mi ON oi.menu_item_id = mi.id
       JOIN orders o ON oi.order_id = o.id
-      WHERE o.status = 'delivered'
       GROUP BY mi.id, mi.name, mi.category
       ORDER BY total_sold DESC
       LIMIT 10
@@ -145,7 +156,7 @@ router.get('/dashboard', adminAuth, async (req, res) => {
 });
 
 // GET /api/reports/sales - Reporte de ventas
-router.get('/sales', adminAuth, async (req, res) => {
+router.get('/sales', authenticateToken, async (req, res) => {
   try {
     console.log('Generando reporte de ventas...');
     
@@ -200,7 +211,7 @@ router.get('/sales', adminAuth, async (req, res) => {
 });
 
 // GET /api/reports/customers - Reporte de clientes
-router.get('/customers', adminAuth, async (req, res) => {
+router.get('/customers', authenticateToken, async (req, res) => {
   try {
     console.log('Generando reporte de clientes...');
     
@@ -292,7 +303,7 @@ router.get('/customers', adminAuth, async (req, res) => {
 });
 
 // GET /api/reports/products - Reporte de productos
-router.get('/products', adminAuth, async (req, res) => {
+router.get('/products', authenticateToken, async (req, res) => {
   try {
     console.log('Generando reporte de productos...');
     
@@ -361,6 +372,106 @@ router.get('/products', adminAuth, async (req, res) => {
       success: false,
       error: 'Error interno del servidor'
     });
+  }
+});
+
+// GET /api/reports/kitchen-stats - Estadísticas para cocina
+router.get('/kitchen-stats', authenticateToken, async (req, res) => {
+  try {
+    console.log('Generando estadísticas de cocina...');
+    
+          const kitchenStats = await executeQuery(`
+            SELECT 
+              COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_orders,
+              COUNT(CASE WHEN status = 'confirmed' THEN 1 END) as confirmed_orders,
+              COUNT(CASE WHEN status = 'preparing' THEN 1 END) as in_progress_orders,
+              COUNT(CASE WHEN status = 'ready' AND DATE(created_at) = CURDATE() THEN 1 END) as completed_today,
+              COALESCE(AVG(CASE WHEN status = 'delivered' THEN TIMESTAMPDIFF(MINUTE, created_at, updated_at) END), 0) as avg_prep_time
+            FROM orders
+            WHERE status IN ('pending', 'confirmed', 'preparing', 'ready', 'delivered')
+          `);
+
+    const stats = kitchenStats[0] || {
+      pending_orders: 0,
+      confirmed_orders: 0,
+      in_progress_orders: 0,
+      completed_today: 0,
+      avg_prep_time: 0
+    };
+
+    res.json({
+      success: true,
+      data: stats
+    });
+
+  } catch (error) {
+    console.error('Error generating kitchen stats:', error);
+    res.status(500).json({ success: false, error: 'Error interno del servidor' });
+  }
+});
+
+// GET /api/reports/delivery-stats - Estadísticas para repartidor
+router.get('/delivery-stats', authenticateToken, async (req, res) => {
+  try {
+    console.log('Generando estadísticas de entrega...');
+    
+    const deliveryStats = await executeQuery(`
+      SELECT 
+        COUNT(CASE WHEN status = 'ready' THEN 1 END) as ready_orders,
+        COUNT(CASE WHEN status = 'out_for_delivery' THEN 1 END) as in_delivery_orders,
+        COUNT(CASE WHEN status = 'delivered' AND DATE(created_at) = CURDATE() THEN 1 END) as delivered_today,
+        COALESCE(AVG(CASE WHEN status = 'delivered' THEN TIMESTAMPDIFF(MINUTE, created_at, updated_at) END), 0) as avg_delivery_time
+      FROM orders
+      WHERE status IN ('ready', 'out_for_delivery', 'delivered')
+    `);
+
+    const stats = deliveryStats[0] || {
+      ready_orders: 0,
+      in_delivery_orders: 0,
+      delivered_today: 0,
+      avg_delivery_time: 0
+    };
+
+    res.json({
+      success: true,
+      data: stats
+    });
+
+  } catch (error) {
+    console.error('Error generating delivery stats:', error);
+    res.status(500).json({ success: false, error: 'Error interno del servidor' });
+  }
+});
+
+// GET /api/reports/cashier-stats - Estadísticas para caja
+router.get('/cashier-stats', authenticateToken, async (req, res) => {
+  try {
+    console.log('Generando estadísticas de caja...');
+    
+    const cashierStats = await executeQuery(`
+      SELECT 
+        COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() AND status != 'cancelled' THEN total_amount END), 0) as today_revenue,
+        COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_payments,
+        COUNT(CASE WHEN status = 'delivered' AND DATE(created_at) = CURDATE() THEN 1 END) as completed_payments,
+        COALESCE(AVG(CASE WHEN status != 'cancelled' THEN total_amount END), 0) as avg_order_value
+      FROM orders
+    `);
+
+    const stats = cashierStats[0] || {
+      today_revenue: 0,
+      pending_payments: 0,
+      completed_payments: 0,
+      avg_order_value: 0
+    };
+
+    res.json({
+      success: true,
+      data: stats
+    });
+
+  } catch (error) {
+    console.error('Error generating cashier stats:', error);
+    res.status(500).json({ success: false, error: 'Error interno del servidor' });
   }
 });
 

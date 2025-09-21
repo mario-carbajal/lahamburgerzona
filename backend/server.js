@@ -22,13 +22,26 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiting
+// Rate limiting - Configuración más permisiva para desarrollo
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // limit each IP to 100 requests per windowMs
-  message: 'Demasiadas solicitudes desde esta IP, intenta de nuevo más tarde.'
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000, // limit each IP to 1000 requests per windowMs (aumentado para desarrollo)
+  message: 'Demasiadas solicitudes desde esta IP, intenta de nuevo más tarde.',
+  skip: (req) => {
+    // Saltar rate limiting en desarrollo para localhost
+    return process.env.NODE_ENV === 'development' && (req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1');
+  }
 });
 app.use('/api/', limiter);
+
+// Disable caching for API responses to avoid 304 issues in dev
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.set('Surrogate-Control', 'no-store');
+  next();
+});
 
 // Compression and logging
 app.use(compression());
@@ -55,8 +68,83 @@ app.use('/api/reviews', require('./routes/reviews'));
 app.use('/api/contact', require('./routes/contact'));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/admin-users', require('./routes/admin-users'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/hero', require('./routes/hero'));
+
+// Endpoint temporal para crear usuario admin inicial
+app.post('/api/setup/create-admin', async (req, res) => {
+  try {
+    const bcrypt = require('bcryptjs');
+    const { executeQuery } = require('./config/database-mysql');
+
+    // Verificar si ya existe un usuario admin
+    const existingAdmin = await executeQuery(
+      'SELECT id FROM admin_users WHERE role = "ADMIN" LIMIT 1'
+    );
+
+    if (existingAdmin.length > 0) {
+      return res.json({
+        success: true,
+        message: 'Ya existe un usuario administrador en el sistema'
+      });
+    }
+
+    // Datos del administrador inicial
+    const adminData = {
+      username: 'admin',
+      email: 'admin@lahamburguezona.com',
+      password: 'admin123',
+      role: 'ADMIN',
+      full_name: 'Administrador Principal',
+      phone: '+52 555-0123'
+    };
+
+    // Encriptar contraseña
+    const saltRounds = 10;
+    const password_hash = await bcrypt.hash(adminData.password, saltRounds);
+
+    // Crear usuario administrador
+    const result = await executeQuery(`
+      INSERT INTO admin_users (username, email, password_hash, role, full_name, phone, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, TRUE)
+    `, [
+      adminData.username,
+      adminData.email,
+      password_hash,
+      adminData.role,
+      adminData.full_name,
+      adminData.phone
+    ]);
+
+    res.json({
+      success: true,
+      message: 'Usuario administrador creado exitosamente',
+      data: {
+        id: result.insertId,
+        username: adminData.username,
+        email: adminData.email,
+        role: adminData.role,
+        credentials: {
+          username: adminData.username,
+          password: adminData.password
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error creating admin user:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor',
+      details: error.message
+    });
+  }
+});
+
+
+
+
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -218,6 +306,44 @@ app.post('/api/orders-create', async (req, res) => {
     }
     
     console.log('💰 Calculated total:', totalAmount);
+    
+    // CREAR O ACTUALIZAR CLIENTE AUTOMÁTICAMENTE
+    let customerId = null;
+    if (customer.email) {
+      try {
+        // Verificar si el cliente ya existe por email
+        const existingCustomer = await executeQuery(
+          'SELECT id FROM customers WHERE email = ?',
+          [customer.email]
+        );
+        
+        if (existingCustomer.length > 0) {
+          // Cliente existe, obtener su ID
+          customerId = existingCustomer[0].id;
+          console.log(`📧 Cliente existente encontrado: ID ${customerId}`);
+          
+          // Actualizar información del cliente si ha cambiado
+          await executeQuery(`
+            UPDATE customers 
+            SET name = ?, phone = ?, address = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `, [customer.name, customer.phone, customer.address, customerId]);
+          
+        } else {
+          // Crear nuevo cliente
+          const customerResult = await executeQuery(`
+            INSERT INTO customers (name, email, phone, address, total_orders, total_spent, last_order_date)
+            VALUES (?, ?, ?, ?, 0, 0, NULL)
+          `, [customer.name, customer.email, customer.phone, customer.address]);
+          
+          customerId = customerResult.insertId;
+          console.log(`👤 Nuevo cliente creado: ID ${customerId}, Email: ${customer.email}`);
+        }
+      } catch (customerError) {
+        console.error('Error creating/updating customer:', customerError.message);
+        // Continuar con la orden aunque falle la creación del cliente
+      }
+    }
     
     // Generar número de orden
     const orderNumber = `ORD${Date.now().toString().slice(-6)}`;
@@ -709,6 +835,107 @@ app.post('/api/orders-create-debug', async (req, res) => {
     
   } catch (error) {
     console.error('DEBUG: Error creating order:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Test endpoint to mark some orders as delivered for dashboard testing
+app.post('/api/test/mark-orders-delivered', async (req, res) => {
+  try {
+    const { executeQuery } = require('./config/database-mysql');
+    
+    // Marcar algunos pedidos como entregados para pruebas
+    const result = await executeQuery(`
+      UPDATE orders 
+      SET status = 'delivered', updated_at = CURRENT_TIMESTAMP 
+      WHERE status != 'delivered' 
+      LIMIT 5
+    `);
+    
+    console.log(`✅ ${result.affectedRows} pedidos marcados como entregados`);
+    
+    res.json({
+      success: true,
+      message: `${result.affectedRows} pedidos marcados como entregados`,
+      affectedRows: result.affectedRows
+    });
+    
+  } catch (error) {
+    console.error('Error marking orders as delivered:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Test endpoint to create sample weekly sales data
+app.post('/api/test/create-weekly-sales', async (req, res) => {
+  try {
+    const { executeQuery } = require('./config/database-mysql');
+    
+    // Crear algunos pedidos de prueba con fechas de la última semana
+    const today = new Date();
+    const orders = [];
+    
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      
+      // Crear 1-3 pedidos por día
+      const ordersPerDay = Math.floor(Math.random() * 3) + 1;
+      
+      for (let j = 0; j < ordersPerDay; j++) {
+        const orderId = `TEST${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}${j + 1}`;
+        const totalAmount = Math.floor(Math.random() * 500) + 100; // Entre $100 y $600
+        
+        orders.push({
+          id: orderId,
+          customer_name: `Cliente Test ${i}-${j}`,
+          customer_email: `test${i}${j}@example.com`,
+          customer_phone: '555-0123',
+          total_amount: totalAmount,
+          status: 'delivered',
+          created_at: date.toISOString().slice(0, 19).replace('T', ' ')
+        });
+      }
+    }
+    
+    // Insertar los pedidos de prueba
+    for (const order of orders) {
+      try {
+        await executeQuery(`
+          INSERT INTO orders (order_number, customer_name, customer_email, customer_phone, total_amount, status, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          order.id,
+          order.customer_name,
+          order.customer_email,
+          order.customer_phone,
+          order.total_amount,
+          order.status,
+          order.created_at,
+          order.created_at
+        ]);
+      } catch (insertError) {
+        // Ignorar errores de duplicados
+        console.log(`Pedido ${order.id} ya existe o error:`, insertError.message);
+      }
+    }
+    
+    console.log(`✅ ${orders.length} pedidos de prueba creados para la última semana`);
+    
+    res.json({
+      success: true,
+      message: `${orders.length} pedidos de prueba creados para la última semana`,
+      ordersCreated: orders.length
+    });
+    
+  } catch (error) {
+    console.error('Error creating weekly sales data:', error);
     res.status(500).json({
       success: false,
       error: error.message

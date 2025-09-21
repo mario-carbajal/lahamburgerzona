@@ -71,11 +71,11 @@ const AdminCustomers = () => {
     try {
       setIsLoading(true);
       
-      const response = await fetch('http://localhost:5000/api/customers', {
+      const response = await fetch('/api/customers', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer admin-token', // Token de autenticación para admin
+          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`, // Token de autenticación para admin
         },
       });
 
@@ -211,11 +211,11 @@ const AdminCustomers = () => {
   // Funciones CRUD
   const handleCreateCustomer = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/customers', {
+      const response = await fetch('/api/customers', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer admin-token',
+          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
         },
         body: JSON.stringify(formData),
       });
@@ -243,11 +243,11 @@ const AdminCustomers = () => {
     if (!selectedCustomer) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/customers/${selectedCustomer.id}`, {
+      const response = await fetch(`/api/customers/${selectedCustomer.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer admin-token',
+          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
         },
         body: JSON.stringify(formData),
       });
@@ -276,11 +276,11 @@ const AdminCustomers = () => {
     if (!selectedCustomer) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/customers/${selectedCustomer.id}`, {
+      const response = await fetch(`/api/customers/${selectedCustomer.id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer admin-token',
+          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
         },
       });
 
@@ -307,11 +307,11 @@ const AdminCustomers = () => {
     try {
       setHistoryLoading(true);
       
-      const response = await fetch(`http://localhost:5000/api/customers/${customerId}/orders`, {
+      const response = await fetch(`/api/customers/${customerId}/orders`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer admin-token',
+          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
         },
       });
 
@@ -323,7 +323,7 @@ const AdminCustomers = () => {
 
       if (data.success && data.data) {
         setCustomerHistory(data.data);
-        console.log('Customer history loaded:', data.data);
+        console.log('Customer history loaded: success');
       } else {
         console.error('Error loading customer history:', data.error);
         setCustomerHistory(null);

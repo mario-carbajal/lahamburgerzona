@@ -153,6 +153,24 @@ const initializeDatabase = async () => {
     `);
 
     await connection.execute(`
+      CREATE TABLE IF NOT EXISTS admin_users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        role ENUM('ADMIN', 'COCINA', 'REPARTIDOR', 'CAJA') NOT NULL,
+        full_name VARCHAR(255) NOT NULL,
+        phone VARCHAR(20),
+        is_active BOOLEAN DEFAULT TRUE,
+        last_login TIMESTAMP NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        created_by INT NULL,
+        FOREIGN KEY (created_by) REFERENCES admin_users(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await connection.execute(`
       CREATE TABLE IF NOT EXISTS contact_messages (
         id INT AUTO_INCREMENT PRIMARY KEY,
         name VARCHAR(255) NOT NULL,

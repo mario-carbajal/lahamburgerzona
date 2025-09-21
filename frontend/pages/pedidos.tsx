@@ -16,6 +16,24 @@ const PedidosPage = () => {
   });
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [errors, setErrors] = useState({});
+  const [emailStatus, setEmailStatus] = useState({
+    checking: false,
+    exists: false,
+    message: ''
+  });
+  const [userType, setUserType] = useState('new'); // 'new' o 'existing'
+  const [verificationStatus, setVerificationStatus] = useState({
+    checking: false,
+    verified: false,
+    message: ''
+  });
+  const [verifiedUserData, setVerifiedUserData] = useState({
+    id: null,
+    name: '',
+    email: '',
+    phone: '',
+    address: ''
+  });
 
   const handleUpdateQuantity = (id: string, change: number) => {
     const currentItem = cartItems.find(item => item.id === id);
@@ -46,8 +64,52 @@ const PedidosPage = () => {
   };
 
   const validatePhone = (phone) => {
-    const phoneRegex = /^[\+]?[0-9\s\-\(\)]{10,}$/;
-    return phoneRegex.test(phone);
+    // Remover todos los caracteres no numéricos para validar
+    const cleanPhone = phone.replace(/\D/g, '');
+    
+    // Validar que tenga exactamente 10 dígitos (formato mexicano)
+    if (cleanPhone.length !== 10) {
+      return false;
+    }
+    
+    // Validar que no empiece con 0 o 1 (números inválidos en México)
+    if (cleanPhone.startsWith('0') || cleanPhone.startsWith('1')) {
+      return false;
+    }
+    
+    // Validar que el primer dígito sea válido para México (2-9)
+    const firstDigit = parseInt(cleanPhone[0]);
+    return firstDigit >= 2 && firstDigit <= 9;
+  };
+
+  const formatPhone = (phone) => {
+    // Remover todos los caracteres no numéricos
+    const cleanPhone = phone.replace(/\D/g, '');
+    
+    // Si tiene 10 dígitos, formatear como (XXX) XXX-XXXX
+    if (cleanPhone.length === 10) {
+      return `(${cleanPhone.slice(0, 3)}) ${cleanPhone.slice(3, 6)}-${cleanPhone.slice(6)}`;
+    }
+    
+    // Si tiene menos de 10 dígitos, devolver tal como está
+    return phone;
+  };
+
+  const maskData = (data, showLast = 2) => {
+    if (!data || data.length <= showLast) return data;
+    const masked = '*'.repeat(data.length - showLast);
+    return masked + data.slice(-showLast);
+  };
+
+  const maskPhone = (phone) => {
+    if (!phone) return phone;
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (cleanPhone.length >= 3) {
+      const maskedLength = cleanPhone.length - 3;
+      const masked = '*'.repeat(maskedLength);
+      return `${masked}${cleanPhone.slice(-3)}`;
+    }
+    return phone;
   };
 
   const validateForm = () => {
@@ -60,11 +122,25 @@ const PedidosPage = () => {
     if (!customerInfo.phone.trim()) {
       newErrors.phone = 'El teléfono es requerido';
     } else if (!validatePhone(customerInfo.phone)) {
-      newErrors.phone = 'Ingresa un teléfono válido (ej: +52 555-0123)';
+      const cleanPhone = customerInfo.phone.replace(/\D/g, '');
+      if (cleanPhone.length !== 10) {
+        newErrors.phone = 'El teléfono debe tener exactamente 10 dígitos';
+      } else if (cleanPhone.startsWith('0') || cleanPhone.startsWith('1')) {
+        newErrors.phone = 'El teléfono no puede empezar con 0 o 1';
+      } else {
+        newErrors.phone = 'Ingresa un teléfono válido (ej: 5551234567)';
+      }
     }
 
-    if (customerInfo.email && !validateEmail(customerInfo.email)) {
+    if (!customerInfo.email.trim()) {
+      newErrors.email = 'El email es requerido';
+    } else if (!validateEmail(customerInfo.email)) {
       newErrors.email = 'Ingresa un email válido (ej: usuario@email.com)';
+    }
+
+    // Validación adicional para usuarios existentes
+    if (userType === 'existing' && emailStatus.exists && !verificationStatus.verified) {
+      newErrors.name = 'Debes verificar tus datos antes de continuar';
     }
 
     if (!customerInfo.address.trim()) {
@@ -76,17 +152,127 @@ const PedidosPage = () => {
   };
 
   const handlePhoneChange = (e) => {
-    const value = e.target.value.replace(/[^\d\s\-\+\(\)]/g, '');
-    setCustomerInfo({...customerInfo, phone: value});
+    const value = e.target.value.replace(/[^\d]/g, ''); // Solo permitir dígitos
+    
+    // Limitar a 10 dígitos máximo
+    const limitedValue = value.slice(0, 10);
+    
+    setCustomerInfo({...customerInfo, phone: limitedValue});
     if (errors.phone) {
       setErrors({...errors, phone: ''});
     }
   };
 
-  const handleEmailChange = (e) => {
-    setCustomerInfo({...customerInfo, email: e.target.value});
+  const handleEmailChange = async (e) => {
+    const email = e.target.value;
+    setCustomerInfo({...customerInfo, email: email});
+    
     if (errors.email) {
       setErrors({...errors, email: ''});
+    }
+
+    // Verificar email si tiene formato válido
+    if (email && validateEmail(email)) {
+      setEmailStatus({ checking: true, exists: false, message: '' });
+      
+      try {
+        const response = await fetch(`/api/customers/check-email/${encodeURIComponent(email)}`);
+        const result = await response.json();
+        
+        if (result.success) {
+          if (result.exists) {
+            setEmailStatus({
+              checking: false,
+              exists: true,
+              message: 'Este email ya está registrado. Selecciona "Soy cliente registrado" para continuar.'
+            });
+            setUserType('existing');
+          } else {
+            setEmailStatus({
+              checking: false,
+              exists: false,
+              message: 'Email disponible para nuevos clientes.'
+            });
+            setUserType('new');
+          }
+        }
+      } catch (error) {
+        console.error('Error checking email:', error);
+        setEmailStatus({
+          checking: false,
+          exists: false,
+          message: ''
+        });
+      }
+    } else if (!email) {
+      setEmailStatus({ checking: false, exists: false, message: '' });
+      setUserType('new');
+    }
+  };
+
+  const handleVerifyExistingUser = async () => {
+    if (!customerInfo.email || !customerInfo.name) {
+      setErrors({...errors, name: 'Email y nombre son requeridos para verificar'});
+      return;
+    }
+
+    setVerificationStatus({ checking: true, verified: false, message: '' });
+    
+    try {
+      const response = await fetch('/api/customers/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: customerInfo.email,
+          name: customerInfo.name
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success && result.verified) {
+        setVerificationStatus({
+          checking: false,
+          verified: true,
+          message: '¡Datos verificados correctamente!'
+        });
+        
+        // Cargar datos del usuario verificado
+        setVerifiedUserData({
+          id: result.data.id,
+          name: result.data.name,
+          email: result.data.email,
+          phone: result.data.phone,
+          address: result.data.address
+        });
+        
+        // Auto-llenar el formulario con los datos verificados
+        setCustomerInfo(prev => ({
+          ...prev,
+          name: result.data.name,
+          phone: result.data.phone,
+          address: result.data.address
+        }));
+        
+        setErrors({...errors, name: '', email: ''});
+      } else {
+        setVerificationStatus({
+          checking: false,
+          verified: false,
+          message: result.message || 'Error en la verificación'
+        });
+        setErrors({...errors, name: result.message || 'Error en la verificación'});
+      }
+    } catch (error) {
+      console.error('Error verifying user:', error);
+      setVerificationStatus({
+        checking: false,
+        verified: false,
+        message: 'Error al verificar los datos'
+      });
+      setErrors({...errors, name: 'Error al verificar los datos'});
     }
   };
 
@@ -116,7 +302,7 @@ const PedidosPage = () => {
       };
 
       // Enviar pedido al backend
-      const response = await fetch('http://localhost:5000/api/orders-create', {
+      const response = await fetch('/api/orders-create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -131,7 +317,7 @@ const PedidosPage = () => {
       const result = await response.json();
       
       if (result.success) {
-        console.log('✅ Pedido creado exitosamente:', result.data);
+        console.log('✅ Pedido creado exitosamente');
         
         // Calcular totales locales para el mensaje de WhatsApp
         const subtotalWithTax = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -325,7 +511,91 @@ Envío: $${deliveryFee.toFixed(2)}
                   Información de Entrega
                 </h2>
 
+                {/* Email Field - Always visible */}
+         <div className="mb-6">
+           <label className="block text-sm font-medium text-gray-700 mb-2">
+             Email *
+           </label>
+                  <div className="relative">
+                    <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <input
+                      type="email"
+                      value={customerInfo.email}
+                      onChange={handleEmailChange}
+                      className={`w-full pl-10 pr-12 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                        errors.email ? 'border-red-500' : 
+                        emailStatus.exists ? 'border-green-500 bg-green-50' : 
+                        emailStatus.checking ? 'border-blue-500' : 'border-gray-300'
+                      }`}
+                      placeholder="tu@email.com"
+                      required
+                    />
+                    {/* Indicador de estado del email */}
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      {emailStatus.checking && (
+                        <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                      )}
+                      {emailStatus.exists && !emailStatus.checking && (
+                        <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      )}
+                      {!emailStatus.exists && !emailStatus.checking && customerInfo.email && validateEmail(customerInfo.email) && (
+                        <div className="w-5 h-5 bg-gray-400 rounded-full flex items-center justify-center">
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {errors.email && (
+                    <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+                  )}
+                  {emailStatus.message && !errors.email && (
+                    <p className={`mt-1 text-sm ${emailStatus.exists ? 'text-green-600' : 'text-blue-600'}`}>
+                      {emailStatus.message}
+                    </p>
+                  )}
+                </div>
+
+                {/* User Type Selection */}
+                {customerInfo.email && emailStatus.exists && (
+                  <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <p className="text-sm text-blue-800 mb-3">
+                      Este email ya está registrado. ¿Cómo quieres continuar?
+                    </p>
+                    <div className="flex space-x-3">
+                      <button
+                        onClick={() => setUserType('existing')}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          userType === 'existing' 
+                            ? 'bg-blue-600 text-white' 
+                            : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
+                        }`}
+                      >
+                        Soy cliente registrado
+                      </button>
+                      <button
+                        onClick={() => setUserType('new')}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          userType === 'new' 
+                            ? 'bg-green-600 text-white' 
+                            : 'bg-white text-green-600 border border-green-600 hover:bg-green-50'
+                        }`}
+                      >
+                        Nuevo pedido
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-4">
+                  {/* Nombre Field */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Nombre completo *
@@ -337,7 +607,8 @@ Envío: $${deliveryFee.toFixed(2)}
                         value={customerInfo.name}
                         onChange={(e) => setCustomerInfo({...customerInfo, name: e.target.value})}
                         className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                          errors.name ? 'border-red-500' : 'border-gray-300'
+                          errors.name ? 'border-red-500' : 
+                          verificationStatus.verified ? 'border-green-500 bg-green-50' : 'border-gray-300'
                         }`}
                         placeholder="Tu nombre completo"
                         required
@@ -346,7 +617,43 @@ Envío: $${deliveryFee.toFixed(2)}
                     {errors.name && (
                       <p className="mt-1 text-sm text-red-600">{errors.name}</p>
                     )}
+                    {verificationStatus.verified && !errors.name && (
+                      <div className="mt-2 p-3 bg-green-50 rounded-lg border border-green-200">
+                        <p className="text-sm text-green-800">
+                          <span className="font-medium">✓ Usuario verificado:</span> {verifiedUserData.name}
+                        </p>
+                        <p className="text-xs text-green-600 mt-1">
+                          Todos tus datos han sido cargados y verificados. Puedes proceder con tu pedido.
+                        </p>
+                      </div>
+                    )}
+                    {verificationStatus.message && !verificationStatus.verified && (
+                      <p className="mt-1 text-sm text-red-600">{verificationStatus.message}</p>
+                    )}
                   </div>
+
+                  {/* Botón de verificación para usuarios existentes */}
+                  {userType === 'existing' && emailStatus.exists && !verificationStatus.verified && (
+                    <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                      <p className="text-sm text-yellow-800 mb-3">
+                        Para continuar como cliente registrado, verifica tus datos:
+                      </p>
+                      <button
+                        onClick={handleVerifyExistingUser}
+                        disabled={verificationStatus.checking || !customerInfo.name}
+                        className="btn-primary text-sm px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {verificationStatus.checking ? (
+                          <div className="flex items-center space-x-2">
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            <span>Verificando...</span>
+                          </div>
+                        ) : (
+                          'Verificar Datos'
+                        )}
+                      </button>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -356,42 +663,48 @@ Envío: $${deliveryFee.toFixed(2)}
                       <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                       <input
                         type="tel"
-                        value={customerInfo.phone}
-                        onChange={handlePhoneChange}
+                        value={verificationStatus.verified ? maskPhone(verifiedUserData.phone) : customerInfo.phone}
+                        onChange={verificationStatus.verified ? undefined : handlePhoneChange}
+                        readOnly={verificationStatus.verified}
                         className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                          errors.phone ? 'border-red-500' : 'border-gray-300'
+                          errors.phone ? 'border-red-500' : 
+                          verificationStatus.verified ? 'border-green-500 bg-green-100 cursor-not-allowed' : 'border-gray-300'
                         }`}
-                        placeholder="+52 555-0123"
+                        placeholder="5551234567"
+                        maxLength={10}
                         required
                       />
                     </div>
                     {errors.phone && (
                       <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
                     )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Email (opcional)
-                    </label>
-                    <div className="relative">
-                      <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                      </svg>
-                      <input
-                        type="email"
-                        value={customerInfo.email}
-                        onChange={handleEmailChange}
-                        className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                          errors.email ? 'border-red-500' : 'border-gray-300'
-                        }`}
-                        placeholder="tu@email.com"
-                      />
-                    </div>
-                    {errors.email && (
-                      <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+                    {!errors.phone && customerInfo.phone && !verificationStatus.verified && (
+                      <div className="mt-1">
+                        <p className="text-sm text-gray-600">
+                          Dígitos: {customerInfo.phone.length}/10
+                          {customerInfo.phone.length === 10 && validatePhone(customerInfo.phone) && (
+                            <span className="text-green-600 ml-2">✓ Formato válido</span>
+                          )}
+                        </p>
+                        {customerInfo.phone.length === 10 && validatePhone(customerInfo.phone) && (
+                          <p className="text-xs text-gray-500">
+                            Formato: {formatPhone(customerInfo.phone)}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {verificationStatus.verified && !errors.phone && (
+                      <div className="mt-2 p-3 bg-green-50 rounded-lg border border-green-200">
+                        <p className="text-sm text-green-800">
+                          <span className="font-medium">✓ Teléfono verificado:</span> {maskPhone(verifiedUserData.phone)}
+                        </p>
+                        <p className="text-xs text-green-600 mt-1">
+                          Tu número de teléfono está verificado y protegido. No se puede modificar.
+                        </p>
+                      </div>
                     )}
                   </div>
+
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -403,7 +716,8 @@ Envío: $${deliveryFee.toFixed(2)}
                         value={customerInfo.address}
                         onChange={(e) => setCustomerInfo({...customerInfo, address: e.target.value})}
                         className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                          errors.address ? 'border-red-500' : 'border-gray-300'
+                          errors.address ? 'border-red-500' : 
+                          verificationStatus.verified ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
                         }`}
                         placeholder="Calle, número, colonia, ciudad..."
                         rows={3}
@@ -412,6 +726,16 @@ Envío: $${deliveryFee.toFixed(2)}
                     </div>
                     {errors.address && (
                       <p className="mt-1 text-sm text-red-600">{errors.address}</p>
+                    )}
+                    {verificationStatus.verified && !errors.address && (
+                      <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <p className="text-sm text-blue-800">
+                          <span className="font-medium">✓ Dirección registrada:</span> {maskData(verifiedUserData.address, 10)}
+                        </p>
+                        <p className="text-xs text-blue-600 mt-1">
+                          Puedes modificar la dirección para este pedido si es necesario.
+                        </p>
+                      </div>
                     )}
                   </div>
 

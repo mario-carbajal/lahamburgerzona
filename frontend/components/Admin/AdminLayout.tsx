@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { 
@@ -15,7 +15,10 @@ import {
   MessageSquare,
   Image
 } from 'lucide-react';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '../../middleware/auth';
+import { getCurrentUser, hasValidSession } from '../../utils/globalSessionManager';
+import GlobalLogout from '../GlobalLogout';
+import SessionDebug from '../SessionDebug';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -23,27 +26,99 @@ interface AdminLayoutProps {
 
 const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const auth = useAuth();
 
-  const navigation = [
-    { name: 'Dashboard', href: '/admin', icon: Home },
-    { name: 'Pedidos', href: '/admin/orders', icon: ShoppingCart },
-    { name: 'Menú', href: '/admin/menu', icon: Package },
-    { name: 'Hero', href: '/admin/hero', icon: Image },
-    { name: 'Reseñas', href: '/admin/reviews', icon: Star },
-    { name: 'Clientes', href: '/admin/customers', icon: Users },
-    { name: 'Reportes', href: '/admin/reports', icon: BarChart3 },
-    { name: 'Mensajes', href: '/admin/messages', icon: MessageSquare },
-    { name: 'Configuración', href: '/admin/settings', icon: Settings },
-  ];
+  // Obtener usuario desde el sistema global de sesión
+  useEffect(() => {
+    const checkUser = () => {
+      console.log('AdminLayout: Verificando sesión...');
+      console.log('AdminLayout: hasValidSession():', hasValidSession());
+      
+      if (hasValidSession()) {
+        const currentUser = getCurrentUser();
+        console.log('AdminLayout: Usuario desde globalSession:', currentUser ? 'exists' : 'null');
+        if (currentUser) {
+          setUser(currentUser);
+          setIsLoading(false);
+          return;
+        }
+      }
+      
+      // Si no hay sesión válida, verificar si el hook de auth tiene usuario
+      console.log('AdminLayout: Usuario desde useAuth:', auth.user ? 'exists' : 'null');
+      if (auth.user) {
+        setUser(auth.user);
+      }
+      setIsLoading(false);
+    };
 
-  const handleLogout = () => {
-    logout();
+    checkUser();
+  }, [auth.user]);
+
+  // Navegación según el rol del usuario
+  const getNavigationByRole = (role) => {
+    const baseNavigation = [
+      { name: 'Dashboard', href: '/admin', icon: Home },
+    ];
+
+    switch (role) {
+      case 'ADMIN':
+        return [
+          ...baseNavigation,
+          { name: 'Pedidos', href: '/admin/orders', icon: ShoppingCart },
+          { name: 'Menú', href: '/admin/menu', icon: Package },
+          { name: 'Hero', href: '/admin/hero', icon: Image },
+          { name: 'Reseñas', href: '/admin/reviews', icon: Star },
+          { name: 'Clientes', href: '/admin/customers', icon: Users },
+          { name: 'Usuarios', href: '/admin/users', icon: Users },
+          { name: 'Reportes', href: '/admin/reports', icon: BarChart3 },
+          { name: 'Mensajes', href: '/admin/messages', icon: MessageSquare },
+          { name: 'Configuración', href: '/admin/settings', icon: Settings },
+        ];
+      case 'COCINA':
+        return [
+          ...baseNavigation,
+          { name: 'Cocina', href: '/admin/cocina', icon: ShoppingCart },
+          { name: 'Menú', href: '/admin/menu', icon: Package },
+        ];
+      case 'REPARTIDOR':
+        return [
+          ...baseNavigation,
+          { name: 'Entregas', href: '/admin/orders', icon: ShoppingCart },
+        ];
+      case 'CAJA':
+        return [
+          ...baseNavigation,
+          { name: 'Transacciones', href: '/admin/orders', icon: ShoppingCart },
+          { name: 'Reportes', href: '/admin/reports', icon: BarChart3 },
+        ];
+      default:
+        return baseNavigation;
+    }
   };
+
+  const navigation = getNavigationByRole(user?.role);
+
+  // Mostrar loading mientras se verifica la sesión
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Verificando sesión...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // El logout ahora se maneja por GlobalLogout
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <SessionDebug />
       {/* Mobile menu button */}
       <button
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -109,13 +184,10 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         </nav>
 
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
-          <button
-            onClick={handleLogout}
-            className="flex items-center w-full px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
-          >
+          <GlobalLogout className="flex items-center w-full px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200">
             <LogOut className="w-5 h-5 mr-3" />
             Cerrar Sesión
-          </button>
+          </GlobalLogout>
         </div>
       </div>
 
@@ -126,12 +198,21 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           <div className="flex items-center justify-between h-16 px-6">
             <div className="flex items-center space-x-4">
               <div className="text-sm text-gray-600">
-                Bienvenido, <span className="font-semibold text-gray-900">Administrador</span>
+                Bienvenido, <span className="font-semibold text-gray-900">{user?.full_name || 'Usuario'}</span>
+                <span className="ml-2 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                  {user?.role || 'N/A'}
+                </span>
               </div>
             </div>
 
             <div className="flex items-center space-x-4">
-              <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
+              <div className="text-sm text-gray-500">
+                {user?.email}
+              </div>
+              <GlobalLogout className="flex items-center space-x-2 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
+                <LogOut className="w-4 h-4" />
+                <span>Cerrar Sesión</span>
+              </GlobalLogout>
             </div>
           </div>
         </header>

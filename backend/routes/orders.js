@@ -3,20 +3,32 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const { executeQuery } = require('../config/database-mysql');
 const notificationService = require('../services/notificationService');
+const jwt = require('jsonwebtoken');
 
-// Middleware de autenticación administrativa
-const adminAuth = (req, res, next) => {
-  const adminToken = req.headers.authorization;
-  
-  if (!adminToken || (adminToken !== 'Bearer admin-token' && adminToken !== 'Bearer dummy-admin-token')) {
+// Middleware de autenticación JWT
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
     return res.status(401).json({
       success: false,
-      message: 'Acceso no autorizado'
+      message: 'Token de acceso requerido'
     });
   }
-  
-  next();
+
+  jwt.verify(token, process.env.JWT_SECRET || 'admin-secret-key', (err, user) => {
+    if (err) {
+      return res.status(403).json({
+        success: false,
+        message: 'Token inválido'
+      });
+    }
+    req.user = user;
+    next();
+  });
 };
+
 
 // Función para generar número de orden único
 function generateOrderNumber() {
@@ -37,7 +49,7 @@ function calculateEstimatedDeliveryTime(prepTime = 15) {
 }
 
 // GET /api/orders - Obtener todas las órdenes (admin)
-router.get('/', adminAuth, async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const { status, limit = 50, offset = 0, sort = 'created_at', order = 'DESC' } = req.query;
     
@@ -47,16 +59,27 @@ router.get('/', adminAuth, async (req, res) => {
     const params = [];
     
     if (status) {
-      conditions.push('status = ?');
-      params.push(status);
+      // Manejar múltiples status separados por comas
+      const statusArray = status.split(',').map(s => s.trim());
+      if (statusArray.length === 1) {
+        conditions.push('status = ?');
+        params.push(statusArray[0]);
+      } else {
+        const placeholders = statusArray.map(() => '?').join(',');
+        conditions.push(`status IN (${placeholders})`);
+        params.push(...statusArray);
+      }
     }
     
     if (conditions.length > 0) {
       query += ' WHERE ' + conditions.join(' AND ');
     }
     
-    query += ` ORDER BY ${sort} ${order} LIMIT ? OFFSET ?`;
-    params.push(parseInt(limit), parseInt(offset));
+    // Convertir parámetros a enteros de forma segura
+    const limitNum = parseInt(limit) || 50;
+    const offsetNum = parseInt(offset) || 0;
+    
+    query += ` ORDER BY ${sort} ${order} LIMIT ${limitNum} OFFSET ${offsetNum}`;
     
     const orders = await executeQuery(query, params);
     
@@ -65,7 +88,7 @@ router.get('/', adminAuth, async (req, res) => {
     if (conditions.length > 0) {
       countQuery += ' WHERE ' + conditions.join(' AND ');
     }
-    const countParams = status ? [status] : [];
+    const countParams = status ? (status.includes(',') ? status.split(',').map(s => s.trim()) : [status]) : [];
     const [{ total }] = await executeQuery(countQuery, countParams);
     
     // Obtener items para cada orden
@@ -141,7 +164,7 @@ router.get('/', adminAuth, async (req, res) => {
 });
 
 // GET /api/orders/:id - Obtener orden específica con items
-router.get('/:id', adminAuth, async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -399,7 +422,7 @@ router.post('/', [
 });
 
 // PUT /api/orders/:id/status - Actualizar estado de la orden
-router.put('/:id/status', adminAuth, [
+router.put('/:id/status', authenticateToken, [
   body('status').isIn(['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'])
     .withMessage('Estado inválido')
 ], async (req, res) => {
@@ -541,7 +564,7 @@ router.get('/customer/:phone', async (req, res) => {
 });
 
 // GET /api/orders/stats/summary - Obtener estadísticas de pedidos
-router.get('/stats/summary', adminAuth, async (req, res) => {
+router.get('/stats/summary', authenticateToken, async (req, res) => {
   try {
     const { period = 'today' } = req.query;
     
@@ -606,7 +629,7 @@ router.get('/stats/summary', adminAuth, async (req, res) => {
 });
 
 // DELETE /api/orders/:id - Cancelar orden
-router.delete('/:id', adminAuth, async (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
@@ -663,7 +686,7 @@ router.delete('/:id', adminAuth, async (req, res) => {
 });
 
 // POST /api/orders/send-message - Enviar mensaje personalizado por WhatsApp
-router.post('/send-message', adminAuth, [
+router.post('/send-message', authenticateToken, [
   body('phone').notEmpty().withMessage('Número de teléfono es requerido'),
   body('message').notEmpty().withMessage('Mensaje es requerido')
 ], async (req, res) => {
@@ -703,7 +726,7 @@ router.post('/send-message', adminAuth, [
 });
 
 // POST /api/orders/send-daily-report - Enviar reporte diario
-router.post('/send-daily-report', adminAuth, async (req, res) => {
+router.post('/send-daily-report', authenticateToken, async (req, res) => {
   try {
     const { date } = req.body;
     
@@ -758,7 +781,7 @@ router.post('/send-daily-report', adminAuth, async (req, res) => {
 });
 
 // GET /api/orders/test - Endpoint de prueba para verificar base de datos
-router.get('/test', adminAuth, async (req, res) => {
+router.get('/test', authenticateToken, async (req, res) => {
   try {
     // Verificar si la tabla orders existe
     const tableCheck = await executeQuery('SHOW TABLES LIKE "orders"');
@@ -800,7 +823,7 @@ router.get('/test', adminAuth, async (req, res) => {
 });
 
 // GET /api/orders/simple - Endpoint simple para debuggear
-router.get('/simple', adminAuth, async (req, res) => {
+router.get('/simple', authenticateToken, async (req, res) => {
   try {
     const orders = await executeQuery('SELECT * FROM orders LIMIT 5');
     
@@ -813,6 +836,118 @@ router.get('/simple', adminAuth, async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message
+    });
+  }
+});
+
+// POST /api/orders/:id/create-customer - Crear cliente desde pedido (admin)
+router.post('/:id/create-customer', authenticateToken, [
+  body('email').isEmail().withMessage('Email válido es requerido'),
+  body('name').notEmpty().withMessage('Nombre es requerido'),
+  body('phone').notEmpty().withMessage('Teléfono es requerido')
+], async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { email, name, phone, address } = req.body;
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Datos de validación incorrectos',
+        details: errors.array()
+      });
+    }
+
+    // Verificar que la orden existe
+    const orderExists = await executeQuery('SELECT * FROM orders WHERE id = ?', [id]);
+    if (orderExists.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Orden no encontrada'
+      });
+    }
+
+    const order = orderExists[0];
+
+    // Verificar si el cliente ya existe
+    const existingCustomer = await executeQuery(
+      'SELECT id FROM customers WHERE email = ?',
+      [email]
+    );
+
+    let customerId;
+    if (existingCustomer.length > 0) {
+      // Actualizar cliente existente
+      customerId = existingCustomer[0].id;
+      await executeQuery(`
+        UPDATE customers 
+        SET name = ?, phone = ?, address = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `, [name, phone, address || order.delivery_address, customerId]);
+      
+      console.log(`👤 Cliente actualizado: ID ${customerId}`);
+    } else {
+      // Crear nuevo cliente
+      const customerResult = await executeQuery(`
+        INSERT INTO customers (name, email, phone, address, total_orders, total_spent, last_order_date)
+        VALUES (?, ?, ?, ?, 0, 0, NULL)
+      `, [name, email, phone, address || order.delivery_address]);
+      
+      customerId = customerResult.insertId;
+      console.log(`👤 Nuevo cliente creado: ID ${customerId}, Email: ${email}`);
+    }
+
+    // Actualizar la orden con el email del cliente
+    await executeQuery(
+      'UPDATE orders SET customer_email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [email, id]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        customerId: customerId,
+        email: email,
+        name: name,
+        phone: phone
+      },
+      message: 'Cliente creado/actualizado exitosamente'
+    });
+
+  } catch (error) {
+    console.error('Error creating customer from order:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor'
+    });
+  }
+});
+
+// Test endpoint para marcar pedidos como entregados
+router.post('/test/mark-delivered', authenticateToken, async (req, res) => {
+  try {
+    // Marcar algunos pedidos como entregados para pruebas del dashboard
+    const result = await executeQuery(`
+      UPDATE orders 
+      SET status = 'delivered', updated_at = CURRENT_TIMESTAMP 
+      WHERE status != 'delivered' 
+      LIMIT 5
+    `);
+    
+    console.log(`✅ ${result.affectedRows} pedidos marcados como entregados para pruebas`);
+    
+    res.json({
+      success: true,
+      message: `${result.affectedRows} pedidos marcados como entregados`,
+      affectedRows: result.affectedRows
+    });
+    
+  } catch (error) {
+    console.error('Error marking orders as delivered:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor'
     });
   }
 });

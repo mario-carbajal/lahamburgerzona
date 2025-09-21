@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import AdminLayout from '../../components/Admin/AdminLayout';
+// Removed apiGet import - using fetch directly like orders page
 import { 
   BarChart3, 
   TrendingUp, 
@@ -92,10 +93,11 @@ const ReportsPage = () => {
   const loadDashboardData = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('http://localhost:5000/api/reports/dashboard', {
+      const response = await fetch('/api/reports/dashboard', {
+        method: 'GET',
         headers: {
-          'Authorization': 'Bearer admin-token',
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
         },
       });
 
@@ -106,7 +108,7 @@ const ReportsPage = () => {
       const data = await response.json();
       if (data.success) {
         setDashboardData(data.data);
-        console.log('Dashboard data loaded:', data.data);
+        console.log('Dashboard data loaded: success');
       } else {
         console.error('Error loading dashboard data:', data.error);
       }
@@ -119,9 +121,9 @@ const ReportsPage = () => {
 
   const loadSalesData = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/reports/sales', {
+      const response = await fetch('/api/reports/sales', {
         headers: {
-          'Authorization': 'Bearer admin-token',
+          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
           'Content-Type': 'application/json',
         },
       });
@@ -133,7 +135,7 @@ const ReportsPage = () => {
       const data = await response.json();
       if (data.success) {
         setSalesData(data.data);
-        console.log('Sales data loaded:', data.data);
+        console.log('Sales data loaded: success');
       }
     } catch (error) {
       console.error('Error loading sales data:', error);
@@ -142,9 +144,9 @@ const ReportsPage = () => {
 
   const loadCustomersData = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/reports/customers', {
+      const response = await fetch('/api/reports/customers', {
         headers: {
-          'Authorization': 'Bearer admin-token',
+          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
           'Content-Type': 'application/json',
         },
       });
@@ -156,7 +158,7 @@ const ReportsPage = () => {
       const data = await response.json();
       if (data.success) {
         setCustomersData(data.data);
-        console.log('Customers data loaded:', data.data);
+        console.log('Customers data loaded: success');
       }
     } catch (error) {
       console.error('Error loading customers data:', error);
@@ -165,9 +167,9 @@ const ReportsPage = () => {
 
   const loadProductsData = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/reports/products', {
+      const response = await fetch('/api/reports/products', {
         headers: {
-          'Authorization': 'Bearer admin-token',
+          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
           'Content-Type': 'application/json',
         },
       });
@@ -179,10 +181,34 @@ const ReportsPage = () => {
       const data = await response.json();
       if (data.success) {
         setProductsData(data.data);
-        console.log('Products data loaded:', data.data);
+        console.log('Products data loaded: success');
       }
     } catch (error) {
       console.error('Error loading products data:', error);
+    }
+  };
+
+  const handleMarkOrdersDelivered = async () => {
+    try {
+      const response = await fetch('/api/orders/test/mark-delivered', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+        }
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        alert(`✅ ${result.message}`);
+        // Recargar datos del dashboard
+        loadDashboardData();
+      } else {
+        alert(`❌ Error: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error marking orders as delivered:', error);
+      alert('❌ Error al marcar pedidos como entregados');
     }
   };
 
@@ -254,6 +280,15 @@ const ReportsPage = () => {
             <p className="text-gray-600 mt-2">Estadísticas y métricas de tu negocio</p>
           </div>
           <div className="flex space-x-3">
+            {/* Botón de prueba oculto - cambiar 'hidden' por 'block' si necesitas generar datos de prueba */}
+            <button
+              onClick={handleMarkOrdersDelivered}
+              className="hidden bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
+              title="Botón de prueba - oculto por defecto"
+            >
+              <span>📦</span>
+              <span>Marcar Entregados (Test)</span>
+            </button>
             <button
               onClick={loadDashboardData}
               className="btn-outline flex items-center space-x-2"

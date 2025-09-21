@@ -61,6 +61,13 @@ const AdminOrders = () => {
   const [cancellingOrder, setCancellingOrder] = useState<number | null>(null);
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
   const [confirmingOrder, setConfirmingOrder] = useState<Order | null>(null);
+  const [showCreateCustomerModal, setShowCreateCustomerModal] = useState(false);
+  const [customerForm, setCustomerForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    address: ''
+  });
 
   useEffect(() => {
     loadOrders();
@@ -72,7 +79,7 @@ const AdminOrders = () => {
 
   const loadOrders = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/orders-simple');
+      const response = await fetch('/api/orders-simple');
       
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
@@ -115,11 +122,12 @@ const AdminOrders = () => {
 
   const updateOrderStatus = async (orderId: number, newStatus: Order['status']) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/orders/${orderId}/status`, {
+      const token = localStorage.getItem('adminToken');
+      const response = await fetch(`/api/orders/${orderId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer admin-token', // Token de autenticación para admin
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ status: newStatus }),
       });
@@ -161,11 +169,12 @@ const AdminOrders = () => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/orders/${cancellingOrder}/cancel`, {
+      const token = localStorage.getItem('adminToken');
+      const response = await fetch(`/api/orders/${cancellingOrder}/cancel`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer admin-token', // Token de autenticación para admin
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ reason: cancelReason.trim() }),
       });
@@ -259,6 +268,51 @@ Dirección: ${confirmingOrder.deliveryAddress}
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('es-MX');
+  };
+
+  const handleCreateCustomer = async () => {
+    if (!selectedOrder) return;
+    
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await fetch(`/api/orders/${selectedOrder.id}/create-customer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(customerForm),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert('Cliente creado/actualizado exitosamente');
+        setShowCreateCustomerModal(false);
+        setCustomerForm({ name: '', email: '', phone: '', address: '' });
+        
+        // Recargar el pedido para mostrar el email actualizado
+        loadOrders();
+        setSelectedOrder(null);
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error creating customer:', error);
+      alert('Error al crear cliente');
+    }
+  };
+
+  const openCreateCustomerModal = () => {
+    if (selectedOrder) {
+      setCustomerForm({
+        name: selectedOrder.customerName,
+        email: selectedOrder.customerEmail || '',
+        phone: selectedOrder.customerPhone,
+        address: selectedOrder.deliveryAddress
+      });
+      setShowCreateCustomerModal(true);
+    }
   };
 
   if (isLoading) {
@@ -396,14 +450,14 @@ Dirección: ${confirmingOrder.deliveryAddress}
                           onClick={() => setSelectedOrder(order)}
                           className="p-2 text-gray-400 hover:text-primary-500 transition-colors"
                         >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="w-10 h-10" />
                         </button>
                         {order.status === 'pending' && (
                           <button
                             onClick={() => updateOrderStatus(order.id, 'confirmed')}
                             className="p-2 text-green-400 hover:text-green-600 transition-colors"
                           >
-                            <Check className="w-4 h-4" />
+                            <Check className="w-10 h-10" />
                           </button>
                         )}
                         {order.status === 'confirmed' && (
@@ -411,7 +465,7 @@ Dirección: ${confirmingOrder.deliveryAddress}
                             onClick={() => updateOrderStatus(order.id, 'preparing')}
                             className="p-2 text-blue-400 hover:text-blue-600 transition-colors"
                           >
-                            <Clock className="w-4 h-4" />
+                            <Clock className="w-10 h-10" />
                           </button>
                         )}
                         {order.status === 'preparing' && (
@@ -419,7 +473,7 @@ Dirección: ${confirmingOrder.deliveryAddress}
                             onClick={() => updateOrderStatus(order.id, 'ready')}
                             className="p-2 text-purple-400 hover:text-purple-600 transition-colors"
                           >
-                            <CheckCircle className="w-4 h-4" />
+                            <CheckCircle className="w-10 h-10" />
                           </button>
                         )}
                         {order.status === 'ready' && (
@@ -427,7 +481,7 @@ Dirección: ${confirmingOrder.deliveryAddress}
                             onClick={() => updateOrderStatus(order.id, 'delivered')}
                             className="p-2 text-green-400 hover:text-green-600 transition-colors"
                           >
-                            <Truck className="w-4 h-4" />
+                            <Truck className="w-10 h-10" />
                           </button>
                         )}
                         {(order.status === 'pending' || order.status === 'confirmed' || order.status === 'preparing') && (
@@ -436,7 +490,7 @@ Dirección: ${confirmingOrder.deliveryAddress}
                             className="p-2 text-red-400 hover:text-red-600 transition-colors"
                             title="Cancelar pedido"
                           >
-                            <X className="w-4 h-4" />
+                            <X className="w-10 h-10" />
                           </button>
                         )}
                       </div>
@@ -468,13 +522,38 @@ Dirección: ${confirmingOrder.deliveryAddress}
               <div className="p-6 space-y-6">
                 {/* Customer Info */}
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Información del Cliente</h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-900">Información del Cliente</h3>
+                    {selectedOrder.customerEmail && (
+                      <button
+                        onClick={openCreateCustomerModal}
+                        className="btn-primary text-sm px-3 py-1"
+                      >
+                        Crear/Actualizar Cliente
+                      </button>
+                    )}
+                  </div>
                   <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                     <p><span className="font-medium">Nombre:</span> {selectedOrder.customerName}</p>
                     <p><span className="font-medium">Teléfono:</span> {selectedOrder.customerPhone}</p>
                     <p><span className="font-medium">Dirección:</span> {selectedOrder.deliveryAddress}</p>
-                    {selectedOrder.customerEmail && (
-                      <p><span className="font-medium">Email:</span> {selectedOrder.customerEmail}</p>
+                    {selectedOrder.customerEmail ? (
+                      <div className="flex items-center justify-between">
+                        <p><span className="font-medium">Email:</span> {selectedOrder.customerEmail}</p>
+                        <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded">
+                          Registrado
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <p className="text-orange-600"><span className="font-medium">Email:</span> No registrado</p>
+                        <button
+                          onClick={openCreateCustomerModal}
+                          className="btn-primary text-sm px-3 py-1"
+                        >
+                          Crear Cliente
+                        </button>
+                      </div>
                     )}
                     {selectedOrder.deliveryInstructions && (
                       <p><span className="font-medium">Instrucciones:</span> {selectedOrder.deliveryInstructions}</p>
@@ -692,6 +771,94 @@ Dirección: ${confirmingOrder.deliveryAddress}
                     <span>Enviar WhatsApp</span>
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Crear Cliente */}
+        {showCreateCustomerModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl max-w-md w-full">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-gray-900">Crear/Actualizar Cliente</h2>
+                  <button
+                    onClick={() => setShowCreateCustomerModal(false)}
+                    className="p-2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nombre *
+                  </label>
+                  <input
+                    type="text"
+                    value={customerForm.name}
+                    onChange={(e) => setCustomerForm({...customerForm, name: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email *
+                  </label>
+                  <input
+                    type="email"
+                    value={customerForm.email}
+                    onChange={(e) => setCustomerForm({...customerForm, email: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Teléfono *
+                  </label>
+                  <input
+                    type="tel"
+                    value={customerForm.phone}
+                    onChange={(e) => setCustomerForm({...customerForm, phone: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Dirección
+                  </label>
+                  <textarea
+                    value={customerForm.address}
+                    onChange={(e) => setCustomerForm({...customerForm, address: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    rows={3}
+                  />
+                </div>
+              </div>
+              
+              <div className="p-6 border-t border-gray-200 flex space-x-3">
+                <button
+                  onClick={() => setShowCreateCustomerModal(false)}
+                  className="flex-1 btn-outline"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCreateCustomer}
+                  className="flex-1 btn-primary"
+                  disabled={!customerForm.name || !customerForm.email || !customerForm.phone}
+                >
+                  Crear Cliente
+                </button>
               </div>
             </div>
           </div>
