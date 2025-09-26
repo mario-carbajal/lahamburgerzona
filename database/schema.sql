@@ -1,348 +1,196 @@
 -- La Hamburguezona Database Schema
--- PostgreSQL Database Schema
-
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- MySQL Database Schema
 
 -- Create database (run this separately)
 -- CREATE DATABASE lahamburguezona;
 
--- Users table for admin and staff
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(100) NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    role VARCHAR(20) NOT NULL DEFAULT 'staff' CHECK (role IN ('admin', 'staff')),
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Categories table
-CREATE TABLE categories (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(100) NOT NULL UNIQUE,
-    description TEXT,
-    image_url VARCHAR(500),
-    display_order INTEGER DEFAULT 0,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+-- Use the database
+USE lahamburguezona;
 
 -- Menu items table
 CREATE TABLE menu_items (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
-    name VARCHAR(200) NOT NULL,
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
     description TEXT,
-    price DECIMAL(10,2) NOT NULL CHECK (price >= 0),
-    image_url VARCHAR(500),
-    rating DECIMAL(3,2) DEFAULT 0.00 CHECK (rating >= 0 AND rating <= 5),
-    prep_time INTEGER DEFAULT 0 CHECK (prep_time >= 0), -- in minutes
-    is_popular BOOLEAN DEFAULT false,
-    is_spicy BOOLEAN DEFAULT false,
-    is_vegetarian BOOLEAN DEFAULT false,
-    is_active BOOLEAN DEFAULT true,
-    display_order INTEGER DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Ingredients table
-CREATE TABLE ingredients (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(100) NOT NULL UNIQUE,
-    is_allergen BOOLEAN DEFAULT false,
-    allergen_type VARCHAR(50), -- gluten, lacteos, huevo, etc.
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Menu item ingredients junction table
-CREATE TABLE menu_item_ingredients (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    menu_item_id UUID REFERENCES menu_items(id) ON DELETE CASCADE,
-    ingredient_id UUID REFERENCES ingredients(id) ON DELETE CASCADE,
-    UNIQUE(menu_item_id, ingredient_id)
-);
-
--- Nutrition information table
-CREATE TABLE nutrition_info (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    menu_item_id UUID REFERENCES menu_items(id) ON DELETE CASCADE,
-    calories INTEGER CHECK (calories >= 0),
-    protein DECIMAL(5,2) CHECK (protein >= 0),
-    carbs DECIMAL(5,2) CHECK (carbs >= 0),
-    fat DECIMAL(5,2) CHECK (fat >= 0),
-    fiber DECIMAL(5,2) CHECK (fiber >= 0),
-    sodium DECIMAL(8,2) CHECK (sodium >= 0),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Combos table
-CREATE TABLE combos (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(200) NOT NULL,
-    description TEXT,
-    price DECIMAL(10,2) NOT NULL CHECK (price >= 0),
-    original_price DECIMAL(10,2) CHECK (original_price >= 0),
-    savings DECIMAL(10,2) GENERATED ALWAYS AS (original_price - price) STORED,
-    image_url VARCHAR(500),
-    is_popular BOOLEAN DEFAULT false,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Combo items junction table
-CREATE TABLE combo_items (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    combo_id UUID REFERENCES combos(id) ON DELETE CASCADE,
-    menu_item_id UUID REFERENCES menu_items(id) ON DELETE CASCADE,
-    quantity INTEGER DEFAULT 1 CHECK (quantity > 0),
-    UNIQUE(combo_id, menu_item_id)
-);
-
--- Customers table
-CREATE TABLE customers (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(100) NOT NULL,
-    email VARCHAR(255) UNIQUE,
-    phone VARCHAR(20) UNIQUE NOT NULL,
-    address TEXT,
-    birth_date DATE,
-    is_active BOOLEAN DEFAULT true,
-    total_orders INTEGER DEFAULT 0,
-    total_spent DECIMAL(10,2) DEFAULT 0.00,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+    price DECIMAL(10,2) NOT NULL,
+    image VARCHAR(500),
+    category VARCHAR(100) NOT NULL,
+    rating DECIMAL(3,2) DEFAULT 0,
+    prep_time INT DEFAULT 0,
+    is_spicy BOOLEAN DEFAULT FALSE,
+    is_popular BOOLEAN DEFAULT FALSE,
+    ingredients JSON,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Orders table
 CREATE TABLE orders (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    order_number VARCHAR(20) UNIQUE NOT NULL,
-    customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
-    customer_name VARCHAR(100) NOT NULL,
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    order_number VARCHAR(50) UNIQUE NOT NULL,
+    customer_name VARCHAR(255) NOT NULL,
     customer_phone VARCHAR(20) NOT NULL,
-    customer_address TEXT NOT NULL,
     customer_email VARCHAR(255),
-    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled')),
-    payment_method VARCHAR(20) DEFAULT 'cash' CHECK (payment_method IN ('cash', 'card', 'online', 'whatsapp')),
-    subtotal DECIMAL(10,2) NOT NULL CHECK (subtotal >= 0),
-    delivery_fee DECIMAL(10,2) DEFAULT 0.00 CHECK (delivery_fee >= 0),
-    tax DECIMAL(10,2) NOT NULL CHECK (tax >= 0),
-    total DECIMAL(10,2) NOT NULL CHECK (total >= 0),
+    delivery_address TEXT NOT NULL,
+    delivery_instructions TEXT,
+    payment_method VARCHAR(50) DEFAULT 'cash',
+    payment_status VARCHAR(50) DEFAULT 'pending',
+    subtotal DECIMAL(10,2) NOT NULL DEFAULT 0,
+    delivery_fee DECIMAL(10,2) DEFAULT 0,
+    tax DECIMAL(10,2) DEFAULT 0,
+    total_amount DECIMAL(10,2) NOT NULL,
+    status VARCHAR(50) DEFAULT 'pending',
+    estimated_delivery_time TIMESTAMP NULL,
+    actual_delivery_time TIMESTAMP NULL,
     notes TEXT,
     status_notes TEXT,
-    estimated_delivery TIMESTAMP WITH TIME ZONE,
-    delivered_at TIMESTAMP WITH TIME ZONE,
-    cancelled_at TIMESTAMP WITH TIME ZONE,
+    cancelled_at TIMESTAMP NULL,
     cancellation_reason TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Order items table
 CREATE TABLE order_items (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
-    menu_item_id UUID REFERENCES menu_items(id) ON DELETE SET NULL,
-    combo_id UUID REFERENCES combos(id) ON DELETE SET NULL,
-    item_name VARCHAR(200) NOT NULL, -- Store name for historical reference
-    quantity INTEGER NOT NULL CHECK (quantity > 0),
-    unit_price DECIMAL(10,2) NOT NULL CHECK (unit_price >= 0),
-    total_price DECIMAL(10,2) NOT NULL CHECK (total_price >= 0),
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT NOT NULL,
+    menu_item_id INT,
+    menu_item_name VARCHAR(255) NOT NULL,
+    quantity INT NOT NULL,
+    unit_price DECIMAL(10,2) NOT NULL,
+    total_price DECIMAL(10,2) NOT NULL,
     special_instructions TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Order status history table
+CREATE TABLE order_status_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    notes TEXT,
+    changed_by VARCHAR(100),
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Reviews table
 CREATE TABLE reviews (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
-    menu_item_id UUID REFERENCES menu_items(id) ON DELETE CASCADE,
-    customer_name VARCHAR(100) NOT NULL,
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_name VARCHAR(255) NOT NULL,
     customer_email VARCHAR(255),
-    customer_phone VARCHAR(20),
-    rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
-    comment TEXT NOT NULL,
-    helpful_count INTEGER DEFAULT 0,
-    verified BOOLEAN DEFAULT false,
-    is_public BOOLEAN DEFAULT true,
-    admin_response TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+    menu_item_id INT,
+    rating INT CHECK (rating >= 1 AND rating <= 5) NOT NULL,
+    comment TEXT,
+    status VARCHAR(50) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Review helpful votes table
-CREATE TABLE review_helpful_votes (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    review_id UUID REFERENCES reviews(id) ON DELETE CASCADE,
-    customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
-    ip_address INET,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(review_id, customer_id),
-    UNIQUE(review_id, ip_address)
-);
+-- Customers table
+CREATE TABLE customers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    address TEXT,
+    total_orders INT DEFAULT 0,
+    total_spent DECIMAL(10,2) DEFAULT 0,
+    last_order_date TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Admin users table
+CREATE TABLE admin_users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role ENUM('ADMIN', 'COCINA', 'REPARTIDOR', 'CAJA') NOT NULL,
+    full_name VARCHAR(255) NOT NULL,
+    phone VARCHAR(20),
+    is_active BOOLEAN DEFAULT TRUE,
+    last_login TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_by INT NULL,
+    FOREIGN KEY (created_by) REFERENCES admin_users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Contact messages table
 CREATE TABLE contact_messages (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(100) NOT NULL,
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL,
     phone VARCHAR(20),
-    subject VARCHAR(200) NOT NULL,
+    subject VARCHAR(255) NOT NULL,
     message TEXT NOT NULL,
-    status VARCHAR(20) DEFAULT 'new' CHECK (status IN ('new', 'read', 'replied', 'archived')),
-    admin_response TEXT,
-    admin_notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+    type VARCHAR(50) DEFAULT 'contact',
+    status VARCHAR(50) DEFAULT 'unread',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Newsletter subscribers table
-CREATE TABLE newsletter_subscribers (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    name VARCHAR(100),
-    is_active BOOLEAN DEFAULT true,
-    subscribed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    unsubscribed_at TIMESTAMP WITH TIME ZONE
-);
-
--- Promotions table
-CREATE TABLE promotions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    title VARCHAR(200) NOT NULL,
-    description TEXT,
-    discount_type VARCHAR(20) NOT NULL CHECK (discount_type IN ('percentage', 'fixed', 'free_delivery')),
-    discount_value DECIMAL(10,2) CHECK (discount_value >= 0),
-    minimum_order DECIMAL(10,2) CHECK (minimum_order >= 0),
-    max_discount DECIMAL(10,2) CHECK (max_discount >= 0),
-    valid_from TIMESTAMP WITH TIME ZONE NOT NULL,
-    valid_until TIMESTAMP WITH TIME ZONE NOT NULL,
-    usage_limit INTEGER CHECK (usage_limit > 0),
-    used_count INTEGER DEFAULT 0,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- System settings table
-CREATE TABLE system_settings (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+-- Settings table
+CREATE TABLE settings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
     setting_key VARCHAR(100) UNIQUE NOT NULL,
     setting_value TEXT,
     description TEXT,
-    data_type VARCHAR(20) DEFAULT 'string' CHECK (data_type IN ('string', 'number', 'boolean', 'json')),
-    is_public BOOLEAN DEFAULT false,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Hero images table
+CREATE TABLE hero_images (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    subtitle VARCHAR(255),
+    description TEXT,
+    image_url VARCHAR(500) NOT NULL,
+    cta_text VARCHAR(100) DEFAULT '¡Ordena Ahora!',
+    cta_link VARCHAR(255) DEFAULT '/pedidos',
+    is_active BOOLEAN DEFAULT TRUE,
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Indexes for better performance
-CREATE INDEX idx_orders_customer_id ON orders(customer_id);
+CREATE INDEX idx_orders_customer_phone ON orders(customer_phone);
 CREATE INDEX idx_orders_status ON orders(status);
 CREATE INDEX idx_orders_created_at ON orders(created_at);
 CREATE INDEX idx_order_items_order_id ON order_items(order_id);
 CREATE INDEX idx_reviews_menu_item_id ON reviews(menu_item_id);
 CREATE INDEX idx_reviews_rating ON reviews(rating);
-CREATE INDEX idx_menu_items_category_id ON menu_items(category_id);
+CREATE INDEX idx_menu_items_category ON menu_items(category);
 CREATE INDEX idx_menu_items_is_active ON menu_items(is_active);
 CREATE INDEX idx_customers_phone ON customers(phone);
 CREATE INDEX idx_customers_email ON customers(email);
 CREATE INDEX idx_contact_messages_status ON contact_messages(status);
 CREATE INDEX idx_contact_messages_created_at ON contact_messages(created_at);
-
--- Triggers for updated_at timestamps
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
-
--- Apply updated_at triggers
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_categories_updated_at BEFORE UPDATE ON categories FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_menu_items_updated_at BEFORE UPDATE ON menu_items FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_nutrition_info_updated_at BEFORE UPDATE ON nutrition_info FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_combos_updated_at BEFORE UPDATE ON combos FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_customers_updated_at BEFORE UPDATE ON customers FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_orders_updated_at BEFORE UPDATE ON orders FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_reviews_updated_at BEFORE UPDATE ON reviews FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_contact_messages_updated_at BEFORE UPDATE ON contact_messages FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_promotions_updated_at BEFORE UPDATE ON promotions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_system_settings_updated_at BEFORE UPDATE ON system_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
--- Function to generate order number
-CREATE OR REPLACE FUNCTION generate_order_number()
-RETURNS TEXT AS $$
-DECLARE
-    order_number TEXT;
-    counter INTEGER;
-BEGIN
-    -- Get current counter from system settings
-    SELECT COALESCE((setting_value::INTEGER), 0) + 1 
-    INTO counter 
-    FROM system_settings 
-    WHERE setting_key = 'order_counter';
-    
-    -- Update or insert counter
-    INSERT INTO system_settings (setting_key, setting_value, description, data_type)
-    VALUES ('order_counter', counter::TEXT, 'Order number counter', 'number')
-    ON CONFLICT (setting_key) 
-    DO UPDATE SET setting_value = counter::TEXT;
-    
-    -- Generate order number (format: LH-YYYYMMDD-0001)
-    order_number := 'LH-' || TO_CHAR(CURRENT_DATE, 'YYYYMMDD') || '-' || LPAD(counter::TEXT, 4, '0');
-    
-    RETURN order_number;
-END;
-$$ LANGUAGE plpgsql;
-
--- Function to update customer statistics
-CREATE OR REPLACE FUNCTION update_customer_stats()
-RETURNS TRIGGER AS $$
-BEGIN
-    -- Update customer order count and total spent
-    UPDATE customers 
-    SET 
-        total_orders = total_orders + 1,
-        total_spent = total_spent + NEW.total
-    WHERE id = NEW.customer_id;
-    
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Trigger to update customer statistics when order is completed
-CREATE TRIGGER update_customer_stats_trigger 
-    AFTER UPDATE ON orders 
-    FOR EACH ROW 
-    WHEN (NEW.status = 'delivered' AND OLD.status != 'delivered')
-    EXECUTE FUNCTION update_customer_stats();
-
--- Insert default system settings
-INSERT INTO system_settings (setting_key, setting_value, description, data_type, is_public) VALUES
-('restaurant_name', 'La Hamburguezona', 'Restaurant name', 'string', true),
-('restaurant_phone', '+52 555-0123', 'Restaurant phone number', 'string', true),
-('restaurant_email', 'info@lahamburguezona.com', 'Restaurant email', 'string', true),
-('restaurant_address', 'Av. Principal 123, Col. Centro, Ciudad de México', 'Restaurant address', 'string', true),
-('delivery_fee', '30', 'Default delivery fee', 'number', true),
-('free_delivery_threshold', '200', 'Minimum order for free delivery', 'number', true),
-('tax_rate', '0.16', 'Tax rate (16%)', 'number', true),
-('currency', 'MXN', 'Currency code', 'string', true),
-('order_counter', '0', 'Order number counter', 'number', false),
-('maintenance_mode', 'false', 'Maintenance mode status', 'boolean', false);
+CREATE INDEX idx_admin_users_username ON admin_users(username);
+CREATE INDEX idx_admin_users_email ON admin_users(email);
+CREATE INDEX idx_hero_images_is_active ON hero_images(is_active);
+CREATE INDEX idx_hero_images_sort_order ON hero_images(sort_order);
 
 -- Insert default admin user (password: admin123)
-INSERT INTO users (name, email, password, role) VALUES
-('Administrador', 'admin@lahamburguezona.com', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin');
+INSERT INTO admin_users (username, email, password_hash, role, full_name) VALUES
+('admin', 'admin@lahamburguezona.com', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'ADMIN', 'Administrador');
 
-COMMENT ON DATABASE lahamburguezona IS 'Database for La Hamburguezona restaurant management system';
-
+-- Insert default settings
+INSERT INTO settings (setting_key, setting_value, description) VALUES
+('restaurant_name', 'La Hamburguezona', 'Restaurant name'),
+('restaurant_phone', '+52 555-0123', 'Restaurant phone number'),
+('restaurant_email', 'info@lahamburguezona.com', 'Restaurant email'),
+('restaurant_address', 'Av. Principal 123, Col. Centro, Ciudad de México', 'Restaurant address'),
+('delivery_fee', '30', 'Default delivery fee'),
+('free_delivery_threshold', '200', 'Minimum order for free delivery'),
+('tax_rate', '0.16', 'Tax rate (16%)'),
+('currency', 'MXN', 'Currency code'),
+('maintenance_mode', 'false', 'Maintenance mode status');

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { hasValidSession, getCurrentUser, getCurrentToken } from '../utils/globalSessionManager';
+import { debugSession, resetSession } from '../utils/debugSession';
 
 // Componente de debug para verificar el estado de la sesión
 const SessionDebug = () => {
@@ -135,6 +136,22 @@ const SessionDebug = () => {
               className="w-full px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
             >
               🔍 Verificar localStorage
+            </button>
+            <button 
+              onClick={() => debugSession()}
+              className="w-full px-2 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700"
+            >
+              🔧 Diagnóstico Completo
+            </button>
+            <button 
+              onClick={() => {
+                if (confirm('¿Estás seguro de que quieres limpiar la sesión y volver al login?')) {
+                  resetSession();
+                }
+              }}
+              className="w-full px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+            >
+              🗑️ Limpiar Sesión
             </button>
           </div>
         </div>

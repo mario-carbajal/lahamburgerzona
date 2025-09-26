@@ -40,8 +40,8 @@ apt install -y \
     nginx \
     certbot \
     python3-certbot-nginx \
-    postgresql \
-    postgresql-contrib \
+    mysql-server \
+    mysql-client \
     redis-server \
     docker.io \
     docker-compose \

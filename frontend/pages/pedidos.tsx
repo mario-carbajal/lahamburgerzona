@@ -113,42 +113,65 @@ const PedidosPage = () => {
   };
 
   const validateForm = () => {
+    console.log('🔍 Validando formulario...');
+    console.log('📝 Datos a validar:', customerInfo);
+    
     const newErrors = {};
 
     if (!customerInfo.name.trim()) {
       newErrors.name = 'El nombre es requerido';
+      console.log('❌ Nombre faltante');
+    } else {
+      console.log('✅ Nombre válido:', customerInfo.name);
     }
 
     if (!customerInfo.phone.trim()) {
       newErrors.phone = 'El teléfono es requerido';
+      console.log('❌ Teléfono faltante');
     } else if (!validatePhone(customerInfo.phone)) {
       const cleanPhone = customerInfo.phone.replace(/\D/g, '');
       if (cleanPhone.length !== 10) {
         newErrors.phone = 'El teléfono debe tener exactamente 10 dígitos';
+        console.log('❌ Teléfono inválido - longitud:', cleanPhone.length);
       } else if (cleanPhone.startsWith('0') || cleanPhone.startsWith('1')) {
         newErrors.phone = 'El teléfono no puede empezar con 0 o 1';
+        console.log('❌ Teléfono inválido - empieza con:', cleanPhone[0]);
       } else {
         newErrors.phone = 'Ingresa un teléfono válido (ej: 5551234567)';
+        console.log('❌ Teléfono inválido - formato incorrecto');
       }
+    } else {
+      console.log('✅ Teléfono válido:', customerInfo.phone);
     }
 
     if (!customerInfo.email.trim()) {
       newErrors.email = 'El email es requerido';
+      console.log('❌ Email faltante');
     } else if (!validateEmail(customerInfo.email)) {
       newErrors.email = 'Ingresa un email válido (ej: usuario@email.com)';
+      console.log('❌ Email inválido:', customerInfo.email);
+    } else {
+      console.log('✅ Email válido:', customerInfo.email);
     }
 
     // Validación adicional para usuarios existentes
     if (userType === 'existing' && emailStatus.exists && !verificationStatus.verified) {
       newErrors.name = 'Debes verificar tus datos antes de continuar';
+      console.log('❌ Usuario existente no verificado');
     }
 
     if (!customerInfo.address.trim()) {
       newErrors.address = 'La dirección es requerida';
+      console.log('❌ Dirección faltante');
+    } else {
+      console.log('✅ Dirección válida:', customerInfo.address);
     }
 
+    console.log('📊 Errores encontrados:', newErrors);
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const isValid = Object.keys(newErrors).length === 0;
+    console.log('🎯 Formulario válido:', isValid);
+    return isValid;
   };
 
   const handlePhoneChange = (e) => {
@@ -277,10 +300,17 @@ const PedidosPage = () => {
   };
 
   const handleCheckout = async () => {
+    console.log('🛒 Iniciando proceso de checkout...');
+    console.log('📋 Datos del cliente:', customerInfo);
+    console.log('🛍️ Items en carrito:', cartItems);
+    
     if (!validateForm()) {
+      console.log('❌ Validación del formulario falló');
+      console.log('🚨 Errores encontrados:', errors);
       return;
     }
 
+    console.log('✅ Validación del formulario exitosa');
     setIsCheckingOut(true);
     
     try {

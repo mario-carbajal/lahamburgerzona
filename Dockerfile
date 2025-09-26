@@ -10,7 +10,7 @@ COPY frontend/package*.json ./
 # Install dependencies
 RUN npm ci --only=production
 
-# Copy source code
+# Copy source code (respects .dockerignore)
 COPY frontend/ ./
 
 # Build the application
@@ -31,7 +31,7 @@ COPY backend/package*.json ./
 # Install backend dependencies
 RUN npm ci --only=production
 
-# Copy backend source code
+# Copy backend source code (respects .dockerignore)
 COPY backend/ ./
 
 # Copy built frontend

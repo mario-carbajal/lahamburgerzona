@@ -1,6 +1,6 @@
 # La Hamburguezona 🍔
 
-Sitio web moderno para el negocio de hamburguesas "La Hamburguezona" con Next.js y Node.js, incluyendo sistema completo de pedidos online y panel administrativo.
+Sitio web moderno para el negocio de hamburguesas "La Hamburguezona" con Next.js y Node.js, incluyendo sistema completo de pedidos online, panel administrativo y gestión de sesiones robusta.
 
 ## 🚀 Características
 
@@ -25,20 +25,25 @@ Sitio web moderno para el negocio de hamburguesas "La Hamburguezona" con Next.js
 - **Envío Gratis**: Automático en pedidos mayores a $200
 
 ### Panel Administrativo
-- **Dashboard**: Estadísticas de pedidos y ventas
+- **Dashboard**: Estadísticas de pedidos y ventas en tiempo real
 - **Gestión de Menú**: CRUD completo para productos con subida de imágenes
 - **Gestión de Pedidos**: Visualización, actualización de estados y cancelación
 - **Gestión de Reseñas**: Aprobación y moderación de comentarios
-- **Autenticación**: Sistema seguro con JWT
+- **Gestión de Clientes**: Base de datos de clientes con historial
+- **Gestión de Usuarios**: Sistema de roles (ADMIN, COCINA, REPARTIDOR, CAJA)
+- **Autenticación**: Sistema seguro con JWT y sesiones persistentes
 - **Estados de Pedidos**: Pending, Confirmed, Preparing, Ready, Delivered, Cancelled
+- **Sesiones Robustas**: Persistencia de sesión por 30 días con auto-refresh
 
 ### Backend (Node.js + Express)
 - **API RESTful**: Endpoints completos para todas las funcionalidades
-- **Base de Datos**: MySQL con tablas optimizadas
-- **Middleware**: CORS, Helmet, Rate Limiting, Compresión
+- **Base de Datos**: MySQL con tablas optimizadas y esquema completo
+- **Middleware**: CORS, Helmet, Rate Limiting, Compresión, Autenticación JWT
 - **Subida de Archivos**: Multer para gestión de imágenes
 - **Notificaciones**: Servicio integrado para WhatsApp
 - **Validaciones**: Express-validator para datos de entrada
+- **Gestión de Sesiones**: JWT con expiración de 30 días y refresh automático
+- **Seguridad**: Headers de seguridad, validación de tokens, sanitización de datos
 
 ## 📁 Estructura del Proyecto
 
@@ -56,10 +61,23 @@ la-hamburguezona/
 │   │   ├── nosotros.tsx        # Historia de la empresa
 │   │   └── admin/              # Panel administrativo
 │   │       ├── login.tsx       # Autenticación admin
+│   │       ├── index.tsx       # Dashboard principal
 │   │       ├── menu.tsx        # Gestión de productos
 │   │       ├── orders.tsx      # Gestión de pedidos
-│   │       └── reviews.tsx     # Gestión de reseñas
+│   │       ├── customers.tsx   # Gestión de clientes
+│   │       ├── reviews.tsx     # Gestión de reseñas
+│   │       ├── cocina.tsx      # Dashboard de cocina
+│   │       └── reports.tsx     # Reportes y estadísticas
 │   ├── components/             # Componentes reutilizables
+│   │   ├── Admin/             # Componentes del panel admin
+│   │   ├── SessionDebug.tsx   # Debug de sesiones
+│   │   └── GlobalLogout.tsx   # Logout global
+│   ├── utils/                 # Utilidades
+│   │   ├── globalSessionManager.js # Gestión global de sesiones
+│   │   ├── api.js             # Cliente API con autenticación
+│   │   └── sessionManager.js  # Gestión de sesiones
+│   ├── middleware/            # Middleware de autenticación
+│   │   └── auth.js            # HOC y hooks de autenticación
 │   ├── context/               # React Context (Carrito)
 │   ├── services/              # Servicios API
 │   └── styles/                # Estilos globales
@@ -68,18 +86,36 @@ la-hamburguezona/
 │   │   ├── menu.js            # CRUD del menú
 │   │   ├── orders.js          # Gestión de pedidos
 │   │   ├── reviews.js         # Sistema de reseñas
-│   │   └── auth.js            # Autenticación admin
+│   │   ├── customers.js       # Gestión de clientes
+│   │   ├── admin.js           # Funciones administrativas
+│   │   ├── admin-users.js     # Gestión de usuarios admin
+│   │   ├── hero.js            # Gestión de imágenes hero
+│   │   └── reports.js         # Generación de reportes
 │   ├── config/                # Configuración
 │   │   └── database-mysql.js  # Conexión a MySQL
+│   ├── data/                  # Datos estáticos
+│   │   └── menu.json          # Menú por defecto
 │   ├── services/              # Servicios del backend
 │   │   └── notificationService.js # WhatsApp notifications
 │   ├── uploads/               # Archivos subidos (imágenes)
+│   ├── scripts/               # Scripts de utilidad
+│   │   ├── insert-admin.js    # Crear usuario admin
+│   │   └── create-admin.js    # Script de creación de admin
+│   ├── ecosystem.config.js    # Configuración PM2
+│   ├── healthcheck.js         # Health check para Docker
 │   └── server.js              # Servidor principal
 ├── database/                  # Scripts de base de datos
-│   └── schema.sql             # Esquema MySQL
+│   ├── schema.sql             # Esquema MySQL completo
+│   └── seed.sql               # Datos iniciales
+├── deployment/                # Configuración de despliegue
+│   ├── docker-compose.yml     # Docker Compose para producción
+│   └── deploy.sh              # Script de despliegue
+├── .dockerignore              # Archivos ignorados en Docker
+├── Dockerfile                 # Multi-stage Docker build
+├── docker-compose.yml         # Docker Compose para desarrollo
 └── docs/                     # Documentación
-    ├── api.md                 # Documentación de API
-    └── deployment.md          # Guía de despliegue
+    ├── INSTALACION.md         # Guía de instalación
+    └── DEPLOYMENT.md          # Guía de despliegue
 ```
 
 ## 🛠️ Instalación
@@ -105,6 +141,7 @@ la-hamburguezona/
 4. **Configurar base de datos MySQL**
    - Crear base de datos `lahamburguezona`
    - Ejecutar el esquema desde `database/schema.sql`
+   - Ejecutar los datos iniciales desde `database/seed.sql`
    - Configurar credenciales en `backend/config/database-mysql.js`
 
 5. **Ejecutar en desarrollo**
@@ -123,10 +160,14 @@ la-hamburguezona/
 
 ## 🌐 URLs de Desarrollo
 
-- **Frontend**: http://localhost:3001
+- **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:5000
-- **Panel Admin**: http://localhost:3001/admin
+- **Panel Admin**: http://localhost:3000/admin
 - **API Health Check**: http://localhost:5000/api/health
+
+### Credenciales por Defecto
+- **Usuario**: admin
+- **Contraseña**: admin123
 
 ## 🔧 Tecnologías Utilizadas
 
@@ -149,11 +190,16 @@ la-hamburguezona/
 ### Base de Datos
 - **MySQL**: Base de datos relacional
 - **Tablas principales**:
-  - `menu_items`: Productos del menú
-  - `orders`: Pedidos de clientes
-  - `order_items`: Items de cada pedido
-  - `reviews`: Reseñas de clientes
-  - `admin_users`: Usuarios administrativos
+  - `menu_items`: Productos del menú con ingredientes JSON
+  - `orders`: Pedidos de clientes con estados completos
+  - `order_items`: Items de cada pedido con precios detallados
+  - `order_status_history`: Historial de cambios de estado
+  - `reviews`: Reseñas de clientes con moderación
+  - `customers`: Base de datos de clientes
+  - `admin_users`: Usuarios administrativos con roles
+  - `hero_images`: Imágenes del hero dinámico
+  - `contact_messages`: Mensajes de contacto
+  - `settings`: Configuraciones del sistema
 
 ## 📱 Funcionalidades Destacadas
 
@@ -169,8 +215,13 @@ la-hamburguezona/
 - ✅ **Dashboard** con métricas en tiempo real
 - ✅ **CRUD completo** para productos del menú
 - ✅ **Gestión de pedidos** con actualización de estados
+- ✅ **Gestión de clientes** con historial completo
+- ✅ **Gestión de usuarios** con sistema de roles
+- ✅ **Dashboard de cocina** para preparación
+- ✅ **Reportes y estadísticas** detalladas
 - ✅ **Subida de imágenes** con preview en tiempo real
-- ✅ **Sistema de autenticación** seguro
+- ✅ **Sistema de autenticación** seguro con JWT
+- ✅ **Sesiones persistentes** por 30 días
 - ✅ **Responsive design** para móvil y desktop
 
 ### Optimizaciones
@@ -179,14 +230,35 @@ la-hamburguezona/
 - ✅ **Rate limiting** para prevenir abuso
 - ✅ **Validación** de datos en frontend y backend
 - ✅ **Manejo de errores** con mensajes user-friendly
+- ✅ **Cache busting** para evitar respuestas 304
+- ✅ **Headers de seguridad** para prevenir ataques
+- ✅ **Sanitización de datos** en todas las entradas
+- ✅ **Gestión de sesiones optimizada** con auto-refresh
 
 ## 🚀 Deployment
 
+### Docker (Recomendado)
+Configurado para desplegar con Docker usando:
+- **Docker Compose**: Orquestación de servicios
+- **Multi-stage builds**: Optimización de imágenes
+- **MySQL 8.0**: Base de datos en contenedor
+- **Nginx**: Proxy reverso y servidor web
+- **PM2**: Gestor de procesos Node.js
+- **SSL**: Certificados HTTPS automáticos
+
+### VPS Tradicional
 Configurado para desplegar en VPS con Hostinger usando:
 - **PM2**: Gestor de procesos Node.js
 - **Nginx**: Proxy reverso y servidor web
 - **MySQL**: Base de datos en servidor
 - **SSL**: Certificados HTTPS automáticos
+
+### Archivos de Despliegue
+- `Dockerfile`: Multi-stage build para producción
+- `docker-compose.yml`: Configuración de desarrollo
+- `deployment/docker-compose.yml`: Configuración de producción
+- `deployment/deploy.sh`: Script automatizado de despliegue
+- `.dockerignore`: Archivos excluidos del build
 
 ## 📋 Próximas Mejoras
 
@@ -196,6 +268,33 @@ Configurado para desplegar en VPS con Hostinger usando:
 - [ ] **Sistema de puntos** para clientes frecuentes
 - [ ] **Integración** con sistemas de delivery
 - [ ] **Analytics** avanzado de ventas
+- [ ] **Sistema de cupones** y descuentos
+- [ ] **Gestión de inventario** en tiempo real
+- [ ] **API pública** para integraciones externas
+- [ ] **Sistema de reservas** para mesas
+
+## 🔧 Características Técnicas Avanzadas
+
+### Gestión de Sesiones
+- **JWT con expiración de 30 días**: Sesiones persistentes
+- **Auto-refresh de tokens**: Renovación automática
+- **Detección de actividad**: Mantiene sesión activa
+- **Logout global**: Cierre de sesión en todos los dispositivos
+- **Debug de sesiones**: Panel de diagnóstico integrado
+
+### Seguridad
+- **Headers de seguridad**: Helmet.js configurado
+- **Rate limiting**: Prevención de ataques DDoS
+- **Validación de entrada**: Sanitización de datos
+- **CORS configurado**: Control de acceso cross-origin
+- **Tokens JWT seguros**: Firmados con secretos
+
+### Base de Datos
+- **Esquema MySQL optimizado**: Índices y relaciones
+- **Datos JSON**: Ingredientes y configuraciones flexibles
+- **Historial completo**: Seguimiento de cambios
+- **Backup automático**: Scripts de respaldo
+- **Migraciones**: Sistema de versionado de esquema
 
 ## 🤝 Contribución
 

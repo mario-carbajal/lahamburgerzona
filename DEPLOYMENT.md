@@ -7,12 +7,14 @@ Esta guía te ayudará a desplegar la aplicación La Hamburguezona en un VPS de 
 ### En el VPS (Hostinger)
 - Ubuntu 20.04 LTS o superior
 - Docker y Docker Compose instalados
+- MySQL 8.0 o superior
 - Dominio configurado (opcional, pero recomendado)
 - Certificado SSL (Let's Encrypt recomendado)
 
 ### En tu máquina local
 - Git
 - Docker y Docker Compose (para testing local)
+- MySQL 8.0 o superior
 
 ## 🛠️ Instalación en el VPS
 
@@ -131,12 +133,12 @@ git pull origin main
 
 ### Backup de la base de datos
 ```bash
-docker-compose exec postgres pg_dump -U postgres lahamburguezona > backup_$(date +%Y%m%d_%H%M%S).sql
+docker-compose exec mysql mysqldump -u root -p lahamburguezona > backup_$(date +%Y%m%d_%H%M%S).sql
 ```
 
 ### Restaurar backup
 ```bash
-docker-compose exec -T postgres psql -U postgres lahamburguezona < backup_archivo.sql
+docker-compose exec -T mysql mysql -u root -p lahamburguezona < backup_archivo.sql
 ```
 
 ## 🔒 Seguridad
@@ -165,7 +167,7 @@ echo "0 12 * * * /usr/bin/certbot renew --quiet" | crontab -
 
 1. **Error de conexión a la base de datos**
    ```bash
-   docker-compose logs postgres
+   docker-compose logs mysql
    ```
 
 2. **Error de permisos en archivos**
@@ -196,7 +198,7 @@ docker-compose ps
 docker-compose exec app sh
 
 # Acceder a base de datos
-docker-compose exec postgres psql -U postgres lahamburguezona
+docker-compose exec mysql mysql -u root -p lahamburguezona
 
 # Limpiar contenedores y volúmenes
 docker-compose down -v

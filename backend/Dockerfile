@@ -7,7 +7,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apk add --no-cache \
     curl \
-    postgresql-client \
+    mysql-client \
     && rm -rf /var/cache/apk/*
 
 # Copy package files

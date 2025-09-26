@@ -8,7 +8,7 @@ Esta guía te ayudará a instalar y configurar La Hamburguezona en tu entorno lo
 
 - **Node.js** (v18 o superior)
 - **npm** (v8 o superior)
-- **PostgreSQL** (v13 o superior)
+- **MySQL** (v8.0 o superior)
 - **Git**
 
 ### Verificar Instalaciones
@@ -20,8 +20,8 @@ node --version
 # Verificar npm
 npm --version
 
-# Verificar PostgreSQL
-psql --version
+# Verificar MySQL
+mysql --version
 
 # Verificar Git
 git --version
@@ -46,8 +46,8 @@ npm run install:all
 ### 3. Configurar Base de Datos
 
 ```bash
-# Crear base de datos PostgreSQL
-createdb lahamburguezona
+# Crear base de datos MySQL
+mysql -u root -p -e "CREATE DATABASE lahamburguezona;"
 
 # Ejecutar scripts de base de datos
 cd database
