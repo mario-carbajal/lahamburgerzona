@@ -11,7 +11,8 @@ import {
   Phone,
   Calendar,
   Check,
-  Clock
+  Clock,
+  X
 } from 'lucide-react';
 
 interface Message {

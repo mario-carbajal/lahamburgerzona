@@ -2,13 +2,31 @@ import { useEffect, useState } from 'react';
 import { hasValidSession, getCurrentUser, getCurrentToken } from '../utils/globalSessionManager';
 import { debugSession, resetSession } from '../utils/debugSession';
 
+// Interfaces TypeScript para corregir el error
+interface LocalStorageData {
+  adminToken: string | null;
+  adminUser: string | null;
+  lastActivity: string | null;
+}
+
+interface DebugInfo {
+  hasValidSession: boolean;
+  currentUser: any;
+  currentToken: string | null;
+  localStorage: LocalStorageData;
+}
+
 // Componente de debug para verificar el estado de la sesión
 const SessionDebug = () => {
-  const [debugInfo, setDebugInfo] = useState({
+  const [debugInfo, setDebugInfo] = useState<DebugInfo>({
     hasValidSession: false,
     currentUser: null,
     currentToken: null,
-    localStorage: {}
+    localStorage: {
+      adminToken: null,
+      adminUser: null,
+      lastActivity: null
+    }
   });
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -28,7 +46,7 @@ const SessionDebug = () => {
       console.log('SessionDebug - Token directo del localStorage:', adminToken ? 'exists' : 'null');
       console.log('SessionDebug - getCurrentToken():', token ? 'exists' : 'null');
       
-      const localStorageData = {
+      const localStorageData: LocalStorageData = {
         adminToken,
         adminUser,
         lastActivity,
@@ -78,7 +96,7 @@ const SessionDebug = () => {
       console.log('SessionDebug - Token directo del localStorage:', adminToken ? 'exists' : 'null');
       console.log('SessionDebug - getCurrentToken():', token ? 'exists' : 'null');
       
-      const localStorageData = {
+      const localStorageData: LocalStorageData = {
         adminToken,
         adminUser,
         lastActivity,

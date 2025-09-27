@@ -3,21 +3,7 @@ import Head from 'next/head';
 import BurgerCard from '../components/Menu/BurgerCard';
 import { useCart } from '../contexts/CartContext';
 import { Search, Filter, Star } from 'lucide-react';
-import apiService from '../services/api';
-
-interface MenuItem {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  image: string;
-  category: string;
-  rating: number;
-  prepTime: number;
-  isPopular?: boolean;
-  isSpicy?: boolean;
-  ingredients: string[];
-}
+import apiService, { MenuItem } from '../services/api';
 
 interface MenuData {
   categories: Array<{
@@ -46,10 +32,20 @@ const MenuPage = () => {
       setIsLoading(true);
       const response = await apiService.getMenuItems();
       if (response.success) {
-        setMenuData(response.data);
+        // Transform the response data to match MenuData interface
+        const menuData = {
+          categories: [
+            { id: 'burgers', name: 'Hamburguesas', description: 'Deliciosas hamburguesas artesanales', icon: '🍔' },
+            { id: 'sides', name: 'Acompañamientos', description: 'Papas, aros de cebolla y más', icon: '🍟' },
+            { id: 'drinks', name: 'Bebidas', description: 'Refrescantes bebidas', icon: '🥤' },
+            { id: 'desserts', name: 'Postres', description: 'Dulces tentaciones', icon: '🍰' }
+          ],
+          items: response.data
+        };
+        setMenuData(menuData);
         // Set the first available category as active
-        if (response.data.items.length > 0) {
-          const firstCategory = response.data.items[0].category;
+        if (response.data.length > 0) {
+          const firstCategory = response.data[0].category;
           setActiveCategory(firstCategory);
         }
       }
@@ -119,7 +115,7 @@ const MenuPage = () => {
         case 'rating':
           return b.rating - a.rating;
         case 'prep-time':
-          return a.prepTime - b.prepTime;
+          return a.prep_time - b.prep_time;
         default:
           return a.name.localeCompare(b.name);
       }

@@ -15,7 +15,7 @@ const PedidosPage = () => {
     notes: ''
   });
   const [isCheckingOut, setIsCheckingOut] = useState(false);
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState<any>({});
   const [emailStatus, setEmailStatus] = useState({
     checking: false,
     exists: false,
@@ -116,7 +116,7 @@ const PedidosPage = () => {
     console.log('🔍 Validando formulario...');
     console.log('📝 Datos a validar:', customerInfo);
     
-    const newErrors = {};
+    const newErrors: any = {};
 
     if (!customerInfo.name.trim()) {
       newErrors.name = 'El nombre es requerido';

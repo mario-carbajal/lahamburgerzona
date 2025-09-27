@@ -3,24 +3,11 @@ import Image from 'next/image';
 import { Plus, Star, Clock, Flame } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
 import { getImageUrl } from '../../utils/imageUtils';
-
-interface Burger {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  image: string;
-  category: string;
-  rating: number;
-  prepTime: number;
-  isSpicy?: boolean;
-  isPopular?: boolean;
-  ingredients: string[];
-}
+import { MenuItem } from '../../services/api';
 
 interface BurgerCardProps {
-  burger: Burger;
-  onAddToCart: (burger: Burger) => void;
+  burger: MenuItem;
+  onAddToCart: (burger: MenuItem) => void;
 }
 
 const BurgerCard: React.FC<BurgerCardProps> = ({ burger, onAddToCart }) => {
@@ -39,12 +26,12 @@ const BurgerCard: React.FC<BurgerCardProps> = ({ burger, onAddToCart }) => {
         
         {/* Badges */}
         <div className="absolute top-3 left-3 flex flex-col space-y-2">
-          {burger.isPopular && (
+          {burger.is_popular && (
             <span className="bg-secondary-500 text-white text-xs font-semibold px-2 py-1 rounded-full">
               ⭐ Popular
             </span>
           )}
-          {burger.isSpicy && (
+          {burger.is_spicy && (
             <span className="bg-red-500 text-white text-xs font-semibold px-2 py-1 rounded-full flex items-center space-x-1">
               <Flame className="w-3 h-3" />
               <span>Picante</span>
@@ -90,7 +77,7 @@ const BurgerCard: React.FC<BurgerCardProps> = ({ burger, onAddToCart }) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-1 text-gray-500">
             <Clock className="w-4 h-4" />
-            <span className="text-sm">{burger.prepTime} min</span>
+            <span className="text-sm">{burger.prep_time} min</span>
           </div>
           <div className="text-2xl font-bold text-primary-500">
             ${burger.price}

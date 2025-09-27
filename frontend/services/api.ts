@@ -1,5 +1,135 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
+// Interfaces para las respuestas de la API
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+  error?: string;
+}
+
+interface HeroImage {
+  id: string;
+  title: string;
+  subtitle?: string;
+  description?: string;
+  imageUrl: string;
+  ctaText: string;
+  ctaLink: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface MenuItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  image: string;
+  category: string;
+  rating: number;
+  prep_time: number;
+  is_spicy: boolean;
+  is_popular: boolean;
+  ingredients: string[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Order {
+  id: string;
+  order_number: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_email?: string;
+  delivery_address: string;
+  delivery_instructions?: string;
+  payment_method: string;
+  payment_status: string;
+  subtotal: number;
+  delivery_fee: number;
+  tax: number;
+  total_amount: number;
+  status: string;
+  estimated_delivery_time?: string;
+  actual_delivery_time?: string;
+  notes?: string;
+  status_notes?: string;
+  cancelled_at?: string;
+  cancellation_reason?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Review {
+  id: string;
+  customer_name: string;
+  customer_email?: string;
+  menu_item_id: number;
+  rating: number;
+  comment?: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  address?: string;
+  total_orders: number;
+  total_spent: number;
+  last_order_date?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface AdminUser {
+  id: string;
+  username: string;
+  email: string;
+  password_hash: string;
+  role: 'ADMIN' | 'COCINA' | 'REPARTIDOR' | 'CAJA';
+  full_name: string;
+  phone?: string;
+  is_active: boolean;
+  last_login?: string;
+  created_at: string;
+  updated_at: string;
+  created_by?: number;
+}
+
+interface DashboardStats {
+  totalOrders: number;
+  totalRevenue: number;
+  totalCustomers: number;
+  avgRating: number;
+  ordersByStatus: Record<string, number>;
+  revenueByMonth: Array<{ month: string; revenue: number }>;
+  topMenuItems: Array<{ name: string; orders: number }>;
+  recentOrders: Order[];
+  reviews: {
+    total: number;
+    avg_rating: number;
+    pending: number;
+    approved: number;
+  };
+}
+
+interface LoginResponse {
+  success: boolean;
+  data: {
+    token: string;
+    user: AdminUser;
+  };
+  message?: string;
+}
+
 class ApiService {
   private baseURL: string;
 
@@ -47,8 +177,8 @@ class ApiService {
   }
 
   // Auth endpoints
-  async login(username: string, password: string) {
-    return this.request('/auth/login', {
+  async login(username: string, password: string): Promise<LoginResponse> {
+    return this.request<LoginResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     });
@@ -61,30 +191,30 @@ class ApiService {
   }
 
   // Menu endpoints
-  async getMenuItems() {
-    return this.request('/menu');
+  async getMenuItems(): Promise<ApiResponse<MenuItem[]>> {
+    return this.request<ApiResponse<MenuItem[]>>('/menu');
   }
 
-  async getMenuItem(id: string) {
-    return this.request(`/menu/${id}`);
+  async getMenuItem(id: string): Promise<ApiResponse<MenuItem>> {
+    return this.request<ApiResponse<MenuItem>>(`/menu/${id}`);
   }
 
-  async createMenuItem(item: any) {
-    return this.request('/menu', {
+  async createMenuItem(item: any): Promise<ApiResponse<MenuItem>> {
+    return this.request<ApiResponse<MenuItem>>('/menu', {
       method: 'POST',
       body: JSON.stringify(item),
     });
   }
 
-  async updateMenuItem(id: string, item: any) {
-    return this.request(`/menu/${id}`, {
+  async updateMenuItem(id: string, item: any): Promise<ApiResponse<MenuItem>> {
+    return this.request<ApiResponse<MenuItem>>(`/menu/${id}`, {
       method: 'PUT',
       body: JSON.stringify(item),
     });
   }
 
-  async deleteMenuItem(id: string) {
-    return this.request(`/menu/${id}`, {
+  async deleteMenuItem(id: string): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/menu/${id}`, {
       method: 'DELETE',
     });
   }
@@ -144,8 +274,8 @@ class ApiService {
   }
 
   // Admin dashboard endpoints
-  async getDashboardStats() {
-    return this.request('/admin/dashboard');
+  async getDashboardStats(): Promise<ApiResponse<DashboardStats>> {
+    return this.request<ApiResponse<DashboardStats>>('/admin/dashboard');
   }
 
   async getReports(period: string = 'month') {
@@ -175,48 +305,48 @@ class ApiService {
   }
 
   // Settings endpoints
-  async getSettings() {
-    return this.request('/admin/settings');
+  async getSettings(): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>('/admin/settings');
   }
 
-  async updateSettings(settings: any) {
-    return this.request('/admin/settings', {
+  async updateSettings(settings: any): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>('/admin/settings', {
       method: 'PUT',
       body: JSON.stringify(settings),
     });
   }
 
   // Menu admin endpoints
-  async getAllMenuItems() {
-    return this.request('/menu/admin/all');
+  async getAllMenuItems(): Promise<ApiResponse<MenuItem[]>> {
+    return this.request<ApiResponse<MenuItem[]>>('/menu/admin/all');
   }
 
-  async updateMenuItemStatus(id: string, isActive: boolean) {
-    return this.request(`/menu/admin/${id}/status`, {
+  async updateMenuItemStatus(id: string, isActive: boolean): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/menu/admin/${id}/status`, {
       method: 'PUT',
       body: JSON.stringify({ isActive }),
     });
   }
 
-  async updateMenuItem(id: string, item: any) {
-    return this.request(`/menu/admin/${id}`, {
+  async updateMenuItemAdmin(id: string, item: any): Promise<ApiResponse<MenuItem>> {
+    return this.request<ApiResponse<MenuItem>>(`/menu/admin/${id}`, {
       method: 'PUT',
       body: JSON.stringify(item),
     });
   }
 
-      async deleteMenuItem(id: string) {
-        return this.request(`/menu/admin/${id}`, {
-          method: 'DELETE',
-        });
-      }
+  async deleteMenuItemAdmin(id: string): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/menu/admin/${id}`, {
+      method: 'DELETE',
+    });
+  }
 
-      async createMenuItem(item: any) {
-        return this.request('/menu/admin', {
-          method: 'POST',
-          body: JSON.stringify(item),
-        });
-      }
+  async createMenuItemAdmin(item: any): Promise<ApiResponse<MenuItem>> {
+    return this.request<ApiResponse<MenuItem>>('/menu/admin', {
+      method: 'POST',
+      body: JSON.stringify(item),
+    });
+  }
 
   async uploadImage(file: File) {
     const formData = new FormData();
@@ -240,36 +370,36 @@ class ApiService {
   }
 
   // Hero Images methods
-  async getHeroImages() {
-    return this.request('/hero');
+  async getHeroImages(): Promise<ApiResponse<HeroImage[]>> {
+    return this.request<ApiResponse<HeroImage[]>>('/hero');
   }
 
-  async getAllHeroImages() {
-    return this.request('/hero/admin/all');
+  async getAllHeroImages(): Promise<ApiResponse<HeroImage[]>> {
+    return this.request<ApiResponse<HeroImage[]>>('/hero/admin/all');
   }
 
-  async createHeroImage(heroData: any) {
-    return this.request('/hero/admin', {
+  async createHeroImage(heroData: any): Promise<ApiResponse<HeroImage>> {
+    return this.request<ApiResponse<HeroImage>>('/hero/admin', {
       method: 'POST',
       body: JSON.stringify(heroData),
     });
   }
 
-  async updateHeroImage(id: string, heroData: any) {
-    return this.request(`/hero/admin/${id}`, {
+  async updateHeroImage(id: string, heroData: any): Promise<ApiResponse<HeroImage>> {
+    return this.request<ApiResponse<HeroImage>>(`/hero/admin/${id}`, {
       method: 'PUT',
       body: JSON.stringify(heroData),
     });
   }
 
-  async deleteHeroImage(id: string) {
-    return this.request(`/hero/admin/${id}`, {
+  async deleteHeroImage(id: string): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/hero/admin/${id}`, {
       method: 'DELETE',
     });
   }
 
-  async toggleHeroImageStatus(id: string) {
-    return this.request(`/hero/admin/${id}/toggle`, {
+  async toggleHeroImageStatus(id: string): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/hero/admin/${id}/toggle`, {
       method: 'PUT',
     });
   }
@@ -280,3 +410,16 @@ const apiService = new ApiService();
 
 export default apiService;
 export { ApiService };
+
+// Export interfaces for use in other components
+export type { 
+  ApiResponse, 
+  HeroImage, 
+  MenuItem, 
+  Order, 
+  Review, 
+  Customer, 
+  AdminUser, 
+  DashboardStats, 
+  LoginResponse 
+};

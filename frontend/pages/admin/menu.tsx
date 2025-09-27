@@ -13,25 +13,8 @@ import {
   Clock,
   Flame
 } from 'lucide-react';
-import apiService from '../../services/api';
+import apiService, { MenuItem } from '../../services/api';
 import ImageUpload from '../../components/UI/ImageUpload';
-
-interface MenuItem {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  image: string;
-  category: string;
-  rating: number;
-  prepTime: number;
-  isSpicy?: boolean;
-  isPopular?: boolean;
-  isActive: boolean;
-  ingredients: string[];
-  createdAt: string;
-  updatedAt: string;
-}
 
 const AdminMenu = () => {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -51,10 +34,10 @@ const AdminMenu = () => {
     image: '',
     category: '',
     rating: '',
-    prepTime: '',
-    isPopular: false,
-    isSpicy: false,
-    isActive: true,
+    prep_time: '',
+    is_popular: false,
+    is_spicy: false,
+    is_active: true,
     ingredients: ''
   });
   const [newProduct, setNewProduct] = useState({
@@ -64,10 +47,10 @@ const AdminMenu = () => {
     image: '',
     category: '',
     rating: '',
-    prepTime: '',
-    isPopular: false,
-    isSpicy: false,
-    isActive: true,
+    prep_time: '',
+    is_popular: false,
+    is_spicy: false,
+    is_active: true,
     ingredients: ''
   });
 
@@ -126,12 +109,12 @@ const AdminMenu = () => {
       const item = menuItems.find(item => item.id === itemId);
       if (!item) return;
 
-      const newStatus = !item.isActive;
+      const newStatus = !item.is_active;
       const response = await apiService.updateMenuItemStatus(itemId, newStatus);
       
       if (response.success) {
         setMenuItems(menuItems.map(item =>
-          item.id === itemId ? { ...item, isActive: newStatus } : item
+          item.id === itemId ? { ...item, is_active: newStatus } : item
         ));
         alert(`Item ${newStatus ? 'activado' : 'desactivado'} correctamente`);
       } else {
@@ -146,7 +129,7 @@ const AdminMenu = () => {
   const deleteItem = async (itemId: string) => {
     if (confirm('¿Estás seguro de que quieres eliminar este item del menú?')) {
       try {
-        const response = await apiService.deleteMenuItem(itemId);
+        const response = await apiService.deleteMenuItemAdmin(itemId);
 
         if (response.success) {
           setMenuItems(menuItems.filter(item => item.id !== itemId));
@@ -178,14 +161,14 @@ const AdminMenu = () => {
         image: newProduct.image || '/images/placeholder-burger.jpg',
         category: newProduct.category,
         rating: parseFloat(newProduct.rating) || 0,
-        prepTime: parseInt(newProduct.prepTime) || 0,
-        isPopular: newProduct.isPopular,
-        isSpicy: newProduct.isSpicy,
-        isActive: newProduct.isActive,
+        prep_time: parseInt(newProduct.prep_time) || 0,
+        is_popular: newProduct.is_popular,
+        is_spicy: newProduct.is_spicy,
+        is_active: newProduct.is_active,
         ingredients: newProduct.ingredients ? newProduct.ingredients.split(',').map(ing => ing.trim()) : []
       };
 
-      const response = await apiService.createMenuItem(productData);
+      const response = await apiService.createMenuItemAdmin(productData);
 
       if (response.success) {
         // Agregar el nuevo producto a la lista
@@ -199,10 +182,10 @@ const AdminMenu = () => {
           image: '',
           category: '',
           rating: '',
-          prepTime: '',
-          isPopular: false,
-          isSpicy: false,
-          isActive: true,
+          prep_time: '',
+          is_popular: false,
+          is_spicy: false,
+          is_active: true,
           ingredients: ''
         });
         
@@ -230,10 +213,10 @@ const AdminMenu = () => {
       image: item.image,
       category: item.category,
       rating: item.rating.toString(),
-      prepTime: item.prepTime.toString(),
-      isPopular: item.isPopular || false,
-      isSpicy: item.isSpicy || false,
-      isActive: item.isActive,
+      prep_time: item.prep_time.toString(),
+      is_popular: item.is_popular || false,
+      is_spicy: item.is_spicy || false,
+      is_active: item.is_active,
       ingredients: item.ingredients.join(', ')
     });
     setIsEditModalOpen(true);
@@ -258,16 +241,16 @@ const AdminMenu = () => {
         image: editingProduct.image || '/images/placeholder-burger.jpg',
         category: editingProduct.category,
         rating: parseFloat(editingProduct.rating) || 0,
-        prepTime: parseInt(editingProduct.prepTime) || 0,
-        isPopular: editingProduct.isPopular,
-        isSpicy: editingProduct.isSpicy,
-        isActive: editingProduct.isActive,
+        prep_time: parseInt(editingProduct.prep_time) || 0,
+        is_popular: editingProduct.is_popular,
+        is_spicy: editingProduct.is_spicy,
+        is_active: editingProduct.is_active,
         ingredients: editingProduct.ingredients ? editingProduct.ingredients.split(',').map(ing => ing.trim()) : []
       };
 
       console.log('Updating product with data:', productData);
 
-      const response = await apiService.updateMenuItem(selectedItem.id, productData);
+      const response = await apiService.updateMenuItemAdmin(selectedItem.id, productData);
 
       if (response.success) {
         // Actualizar el producto en la lista
@@ -368,12 +351,12 @@ const AdminMenu = () => {
                   className="w-full h-48 object-cover"
                 />
                 <div className="absolute top-3 left-3 flex flex-col space-y-2">
-                  {item.isPopular && (
+                  {item.is_popular && (
                     <span className="bg-secondary-500 text-white text-xs font-semibold px-2 py-1 rounded-full">
                       ⭐ Popular
                     </span>
                   )}
-                  {item.isSpicy && (
+                  {item.is_spicy && (
                     <span className="bg-red-500 text-white text-xs font-semibold px-2 py-1 rounded-full flex items-center space-x-1">
                       <Flame className="w-3 h-3" />
                       <span>Picante</span>
@@ -382,9 +365,9 @@ const AdminMenu = () => {
                 </div>
                 <div className="absolute top-3 right-3">
                   <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                    item.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    item.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                   }`}>
-                    {item.isActive ? 'Activo' : 'Inactivo'}
+                    {item.is_active ? 'Activo' : 'Inactivo'}
                   </span>
                 </div>
               </div>
@@ -403,7 +386,7 @@ const AdminMenu = () => {
                     </div>
                     <div className="flex items-center space-x-1">
                       <Clock className="w-4 h-4" />
-                      <span>{item.prepTime} min</span>
+                      <span>{item.prep_time} min</span>
                     </div>
                   </div>
 
@@ -416,12 +399,12 @@ const AdminMenu = () => {
                     <button
                       onClick={() => toggleItemStatus(item.id)}
                       className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                        item.isActive
+                        item.is_active
                           ? 'bg-red-100 text-red-700 hover:bg-red-200'
                           : 'bg-green-100 text-green-700 hover:bg-green-200'
                       }`}
                     >
-                      {item.isActive ? (
+                      {item.is_active ? (
                         <>
                           <EyeOff className="w-4 h-4 inline mr-1" />
                           Desactivar
@@ -510,8 +493,8 @@ const AdminMenu = () => {
                           <label className="block text-sm font-medium text-gray-700 mb-2">Tiempo de preparación (min)</label>
                           <input
                             type="number"
-                            value={newProduct.prepTime}
-                            onChange={(e) => setNewProduct({...newProduct, prepTime: e.target.value})}
+                            value={newProduct.prep_time}
+                            onChange={(e) => setNewProduct({...newProduct, prep_time: e.target.value})}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                             placeholder="12"
                           />
@@ -570,8 +553,8 @@ const AdminMenu = () => {
                         <label className="flex items-center">
                           <input 
                             type="checkbox" 
-                            checked={newProduct.isSpicy}
-                            onChange={(e) => setNewProduct({...newProduct, isSpicy: e.target.checked})}
+                            checked={newProduct.is_spicy}
+                            onChange={(e) => setNewProduct({...newProduct, is_spicy: e.target.checked})}
                             className="mr-2" 
                           />
                           <span className="text-sm text-gray-700">Es picante</span>
@@ -579,8 +562,8 @@ const AdminMenu = () => {
                         <label className="flex items-center">
                           <input 
                             type="checkbox" 
-                            checked={newProduct.isPopular}
-                            onChange={(e) => setNewProduct({...newProduct, isPopular: e.target.checked})}
+                            checked={newProduct.is_popular}
+                            onChange={(e) => setNewProduct({...newProduct, is_popular: e.target.checked})}
                             className="mr-2" 
                           />
                           <span className="text-sm text-gray-700">Es popular</span>
@@ -588,8 +571,8 @@ const AdminMenu = () => {
                         <label className="flex items-center">
                           <input 
                             type="checkbox" 
-                            checked={newProduct.isActive}
-                            onChange={(e) => setNewProduct({...newProduct, isActive: e.target.checked})}
+                            checked={newProduct.is_active}
+                            onChange={(e) => setNewProduct({...newProduct, is_active: e.target.checked})}
                             className="mr-2" 
                           />
                           <span className="text-sm text-gray-700">Está activo</span>
@@ -689,8 +672,8 @@ const AdminMenu = () => {
                           <label className="block text-sm font-medium text-gray-700 mb-2">Tiempo de preparación (min)</label>
                           <input
                             type="number"
-                            value={editingProduct.prepTime}
-                            onChange={(e) => setEditingProduct({...editingProduct, prepTime: e.target.value})}
+                            value={editingProduct.prep_time}
+                            onChange={(e) => setEditingProduct({...editingProduct, prep_time: e.target.value})}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                           />
                         </div>
@@ -745,8 +728,8 @@ const AdminMenu = () => {
                         <label className="flex items-center">
                           <input 
                             type="checkbox" 
-                            checked={editingProduct.isSpicy}
-                            onChange={(e) => setEditingProduct({...editingProduct, isSpicy: e.target.checked})}
+                            checked={editingProduct.is_spicy}
+                            onChange={(e) => setEditingProduct({...editingProduct, is_spicy: e.target.checked})}
                             className="mr-2" 
                           />
                           <span className="text-sm text-gray-700">Es picante</span>
@@ -754,8 +737,8 @@ const AdminMenu = () => {
                         <label className="flex items-center">
                           <input 
                             type="checkbox" 
-                            checked={editingProduct.isPopular}
-                            onChange={(e) => setEditingProduct({...editingProduct, isPopular: e.target.checked})}
+                            checked={editingProduct.is_popular}
+                            onChange={(e) => setEditingProduct({...editingProduct, is_popular: e.target.checked})}
                             className="mr-2" 
                           />
                           <span className="text-sm text-gray-700">Es popular</span>
@@ -763,8 +746,8 @@ const AdminMenu = () => {
                         <label className="flex items-center">
                           <input 
                             type="checkbox" 
-                            checked={editingProduct.isActive}
-                            onChange={(e) => setEditingProduct({...editingProduct, isActive: e.target.checked})}
+                            checked={editingProduct.is_active}
+                            onChange={(e) => setEditingProduct({...editingProduct, is_active: e.target.checked})}
                             className="mr-2" 
                           />
                           <span className="text-sm text-gray-700">Está activo</span>

@@ -2,20 +2,8 @@ import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight, Star, Clock, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
-import apiService from '../../services/api';
+import apiService, { HeroImage } from '../../services/api';
 import { getImageUrl } from '../../utils/imageUtils';
-
-interface HeroImage {
-  id: string;
-  title: string;
-  subtitle?: string;
-  description?: string;
-  imageUrl: string;
-  ctaText: string;
-  ctaLink: string;
-  isActive: boolean;
-  sortOrder: number;
-}
 
 interface DynamicHeroProps {
   showStats?: boolean;
@@ -65,7 +53,9 @@ const DynamicHero: React.FC<DynamicHeroProps> = ({
         ctaText: '¡Ordena Ahora!',
         ctaLink: '/pedidos',
         isActive: true,
-        sortOrder: 1
+        sortOrder: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       }]);
     } finally {
       setIsLoading(false);

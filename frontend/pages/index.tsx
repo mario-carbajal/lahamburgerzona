@@ -4,21 +4,7 @@ import DynamicHero from '../components/UI/DynamicHero';
 import BurgerCard from '../components/Menu/BurgerCard';
 import { useCart } from '../contexts/CartContext';
 import { Star, Clock, Users, Award } from 'lucide-react';
-import apiService from '../services/api';
-
-interface MenuItem {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  image: string;
-  category: string;
-  rating: number;
-  prepTime: number;
-  isPopular?: boolean;
-  isSpicy?: boolean;
-  ingredients: string[];
-}
+import apiService, { MenuItem } from '../services/api';
 
 const features = [
   {
@@ -77,18 +63,18 @@ const HomePage = () => {
     try {
       setIsLoading(true);
       const response = await apiService.getMenuItems();
-      if (response.success && response.data.items) {
+      if (response.success && response.data) {
         // Filtrar hamburguesas populares
-        const popularBurgers = response.data.items
-          .filter((item: MenuItem) => item.isPopular && item.isActive);
+        const popularBurgers = response.data
+          .filter((item: MenuItem) => item.is_popular && item.is_active);
         
         // Si hay menos de 3 populares, completar con las mejor calificadas
         if (popularBurgers.length < 3) {
           const remainingSlots = 3 - popularBurgers.length;
           const popularIds = popularBurgers.map(burger => burger.id);
           
-          const topRatedBurgers = response.data.items
-            .filter((item: MenuItem) => item.isActive && !popularIds.includes(item.id))
+          const topRatedBurgers = response.data
+            .filter((item: MenuItem) => item.is_active && !popularIds.includes(item.id))
             .sort((a: MenuItem, b: MenuItem) => b.rating - a.rating)
             .slice(0, remainingSlots);
           
