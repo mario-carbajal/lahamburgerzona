@@ -1,5 +1,5 @@
 import { useRouter } from 'next/router';
-import { clearSession } from '../utils/globalSessionManager';
+import { clearSession } from '../utils/session';
 
 // Componente para cerrar sesión globalmente
 const GlobalLogout = ({ children, className = '' }) => {

@@ -8,7 +8,7 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -18,6 +18,12 @@ COPY . .
 
 # Build the application
 ENV NEXT_TELEMETRY_DISABLED 1
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_SENTRY_DSN
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
+ARG NEXT_PUBLIC_GA_ID
+ENV NEXT_PUBLIC_GA_ID=$NEXT_PUBLIC_GA_ID
 RUN npm run build
 
 # Production image, copy all the files and run next
@@ -45,9 +51,11 @@ EXPOSE 3000
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
-# Health check
+# Health check (127.0.0.1, no "localhost": en Alpine resuelve a ::1 primero y
+# el servidor solo escucha en IPv4, lo que marcaba el contenedor "unhealthy"
+# aunque respondiera bien por Traefik)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3000 || exit 1
+    CMD wget -q --spider http://127.0.0.1:3000 || exit 1
 
 # Start the application
 CMD ["node", "server.js"]

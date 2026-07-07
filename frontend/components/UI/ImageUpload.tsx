@@ -53,19 +53,13 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
 
       // Subir archivo
       const response = await apiService.uploadImage(file);
-      
-      if (response.success) {
-        // Usar la URL relativa para guardar en la base de datos
-        const relativeUrl = response.data.url;
-        
-        // Actualizar el preview usando la función helper
-        setPreview(getImageUrl(relativeUrl));
-        
-        // Notificar al componente padre con URL relativa (para guardar en BD)
-        onChange(relativeUrl);
-      } else {
-        throw new Error(response.message || 'Error al subir la imagen');
-      }
+      const relativeUrl = response.data.url;
+
+      // Actualizar el preview usando la función helper
+      setPreview(getImageUrl(relativeUrl));
+
+      // Notificar al componente padre con la URL (para guardar en BD)
+      onChange(relativeUrl);
     } catch (error: any) {
       console.error('Error uploading image:', error);
       alert(error.message || 'Error al subir la imagen');

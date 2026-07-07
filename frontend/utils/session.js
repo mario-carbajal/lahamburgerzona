@@ -1,87 +1,56 @@
-// Utilidades para manejo de sesión
+// Sesión del panel admin — token JWT (8h) + datos de usuario en localStorage.
+const TOKEN_KEY = 'adminToken';
+const USER_KEY = 'adminUser';
+
 export const isTokenValid = (token) => {
   if (!token) return false;
-  
   try {
-    const tokenParts = token.split('.');
-    if (tokenParts.length !== 3) return false;
-    
-    const payload = JSON.parse(atob(tokenParts[1]));
-    const currentTime = Math.floor(Date.now() / 1000);
-    
-    return payload.exp && payload.exp > currentTime;
-  } catch (error) {
-    console.warn('Error validating token:', error);
+    const parts = token.split('.');
+    if (parts.length !== 3) return false;
+    const payload = JSON.parse(atob(parts[1]));
+    return Boolean(payload.exp) && payload.exp > Math.floor(Date.now() / 1000);
+  } catch {
     return false;
   }
 };
 
-export const getStoredSession = () => {
+export const getCurrentToken = () => {
   if (typeof window === 'undefined') return null;
-  
-  const token = localStorage.getItem('adminToken');
-  const userData = localStorage.getItem('adminUser');
-  
-  if (!token || !userData) return null;
-  
+  return localStorage.getItem(TOKEN_KEY);
+};
+
+export const getCurrentUser = () => {
+  if (typeof window === 'undefined') return null;
+  const userData = localStorage.getItem(USER_KEY);
+  if (!userData) return null;
   try {
-    const user = JSON.parse(userData);
-    return { token, user };
-  } catch (error) {
-    console.warn('Error parsing user data:', error);
+    return JSON.parse(userData);
+  } catch {
     return null;
   }
 };
 
-export const clearSession = () => {
-  if (typeof window === 'undefined') return;
-  
-  localStorage.removeItem('adminToken');
-  localStorage.removeItem('adminUser');
-};
-
-export const refreshToken = async () => {
-  const token = localStorage.getItem('adminToken');
-  if (!token) return false;
-  
-  try {
-    const response = await fetch('/api/admin-users/refresh-token', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      if (data.success && data.data && data.data.token) {
-        localStorage.setItem('adminToken', data.data.token);
-        return true;
-      }
-    }
-  } catch (error) {
-    console.warn('Error refreshing token:', error);
-  }
-  
-  return false;
-};
-
-export const verifySession = async () => {
-  const session = getStoredSession();
-  if (!session) return false;
-  
-  const { token, user } = session;
-  
-  // Verificar si el token es válido localmente
+export const hasValidSession = () => {
+  const token = getCurrentToken();
   if (!isTokenValid(token)) {
-    // Intentar refrescar el token
-    const refreshed = await refreshToken();
-    if (!refreshed) {
-      clearSession();
-      return false;
-    }
+    if (token) clearSession();
+    return false;
   }
-  
   return true;
 };
+
+export const createSession = (token, user) => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+};
+
+export const clearSession = () => {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+};
+
+export const hasRole = (role) => getCurrentUser()?.role === role;
+
+export const hasAnyRole = (roles) => roles.includes(getCurrentUser()?.role);

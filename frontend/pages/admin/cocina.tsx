@@ -1,66 +1,46 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import toast from 'react-hot-toast';
+import { playNewOrderSound } from '../../utils/orderAlerts';
 import Head from 'next/head';
 import AdminLayout from '../../components/Admin/AdminLayout';
 import { withAuth } from '../../middleware/auth';
-// Removed apiGet, apiPut imports - using fetch directly like orders page
+import apiService from '../../services/api';
+import type { Order, MenuItem } from '../../services/api';
 import { Clock, Users, ChefHat, CheckCircle, Eye, AlertCircle, Package } from 'lucide-react';
-
-interface OrderItem {
-  id: string;
-  order_id: string;
-  menu_item_id: number;
-  quantity: number;
-  price: string;
-  product_name?: string;
-  special_instructions?: string;
-  created_at: string;
-}
-
-interface Order {
-  id: string;
-  orderNumber: string;
-  customerName: string;
-  customerPhone: string;
-  totalAmount: number;
-  total?: number;
-  status: string;
-  items: OrderItem[];
-  deliveryInstructions?: string;
-  deliveryAddress?: string;
-  special_instructions?: string;
-  createdAt: string;
-  created_at?: string;
-  estimated_delivery?: string;
-}
 
 interface KitchenStats {
   pending_orders: number;
+  confirmed_orders: number;
   in_progress_orders: number;
   completed_today: number;
   avg_prep_time: number;
-  confirmed_orders: number;
 }
+
+const ACTIVE_STATUSES = ['pending', 'confirmed', 'preparing'];
+
+// Minutos antes de su hora en que un pedido programado se "activa" en la cola de cocina
+const MINUTOS_ACTIVACION = 40;
 
 const CocinaDashboard: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState<KitchenStats>({
     pending_orders: 0,
+    confirmed_orders: 0,
     in_progress_orders: 0,
     completed_today: 0,
-    avg_prep_time: 0,
-    confirmed_orders: 0
+    avg_prep_time: 0
   });
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState<string | null>(null);
-  const [menuItems, setMenuItems] = useState<any[]>([]);
+  const [updating, setUpdating] = useState<Order['id'] | null>(null);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
   useEffect(() => {
     fetchOrders();
     fetchStats();
     fetchMenuItems();
-    
+
     // Actualizar cada 30 segundos
     const interval = setInterval(() => {
       fetchOrders();
@@ -70,49 +50,102 @@ const CocinaDashboard: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // IDs de pedidos ya vistos; null hasta la primera carga para no sonar al entrar
+  const seenOrderIdsRef = useRef<Set<string> | null>(null);
+
+  // Reloj interno: re-evalúa cada 30s si algún programado ya debe activarse
+  const [ahora, setAhora] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setAhora(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Programado "lejano": aún no le toca a cocina (falta más del margen de activación)
+  const esProgramadoLejano = (o: Order) =>
+    !!o.scheduled_for &&
+    new Date(o.scheduled_for).getTime() - ahora > MINUTOS_ACTIVACION * 60 * 1000 &&
+    ['pending', 'confirmed'].includes(o.status);
+
+  const activos = orders.filter((o) => !esProgramadoLejano(o));
+  const programados = orders
+    .filter(esProgramadoLejano)
+    .sort((a, b) => new Date(a.scheduled_for!).getTime() - new Date(b.scheduled_for!).getTime());
+
+  const faltante = (o: Order) => {
+    const ms = new Date(o.scheduled_for!).getTime() - ahora;
+    const totalMin = Math.max(0, Math.round(ms / 60000));
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return h > 0 ? `${h}h ${m}m` : `${m} min`;
+  };
+
+  // Alerta de activación: suena una vez cuando un programado cruza el umbral
+  const activacionAlertadaRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const activables = orders.filter(
+      (o) => o.scheduled_for && !esProgramadoLejano(o) && ACTIVE_STATUSES.includes(o.status)
+    );
+    if (activacionAlertadaRef.current === null) {
+      // Primera carga: baseline silencioso para no sonar al abrir la página
+      activacionAlertadaRef.current = new Set(activables.map((o) => String(o.id)));
+      return;
+    }
+    for (const o of activables) {
+      if (!activacionAlertadaRef.current.has(String(o.id))) {
+        activacionAlertadaRef.current.add(String(o.id));
+        playNewOrderSound();
+        toast(
+          `⏰ Pedido programado ${o.order_number} entra a cocina — entrega a las ${new Date(o.scheduled_for!).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`,
+          { icon: '🔔', duration: 10000 }
+        );
+      }
+    }
+  }, [orders, ahora]);
+
   const fetchOrders = async () => {
     try {
-      const response = await fetch('/api/orders?status=pending,confirmed,preparing&limit=50', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
-        },
-      });
-      const data = await response.json();
-      
-      if (data.success) {
-        setOrders(data.data || []);
+      const response = await apiService.getOrders();
+      const active = response.data.filter(o => ACTIVE_STATUSES.includes(o.status));
+
+      const previous = seenOrderIdsRef.current;
+      if (previous !== null) {
+        const nuevos = active.filter(o => !previous.has(String(o.id)));
+        if (nuevos.length > 0) {
+          playNewOrderSound();
+          for (const pedido of nuevos) {
+            const esProgramado =
+              pedido.scheduled_for &&
+              new Date(pedido.scheduled_for).getTime() - Date.now() > MINUTOS_ACTIVACION * 60 * 1000;
+            if (esProgramado) {
+              toast(
+                `📅 Pedido programado ${pedido.order_number} para ${new Date(pedido.scheduled_for!).toLocaleString('es-MX', { weekday: 'short', hour: '2-digit', minute: '2-digit' })} — se activará solo ${MINUTOS_ACTIVACION} min antes`,
+                { icon: '⏰', duration: 10000 }
+              );
+            } else {
+              toast.success(`Nuevo pedido ${pedido.order_number} de ${pedido.customer_name}`, {
+                icon: '🔔',
+                duration: 8000,
+              });
+              // Evita que la alerta de activación vuelva a sonar para este pedido
+              activacionAlertadaRef.current?.add(String(pedido.id));
+            }
+          }
+        }
       }
+      seenOrderIdsRef.current = new Set(active.map(o => String(o.id)));
+
+      setOrders(active);
     } catch (error) {
       console.error('Error fetching orders:', error);
-      if (error.message.includes('Token expirado')) {
-        // El token expiró y no se pudo refrescar, redirigir al login
-        window.location.href = '/admin/login';
-      }
     }
   };
 
   const fetchStats = async () => {
     try {
-      const response = await fetch('/api/reports/kitchen-stats', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
-        },
-      });
-      const data = await response.json();
-      
-      if (data.success) {
-        setStats(data.data);
-      }
+      const response = await apiService.getReport('cocina');
+      setStats(response.data as KitchenStats);
     } catch (error) {
       console.error('Error fetching stats:', error);
-      if (error.message.includes('Token expirado')) {
-        // El token expiró y no se pudo refrescar, redirigir al login
-        window.location.href = '/admin/login';
-      }
     } finally {
       setLoading(false);
     }
@@ -120,56 +153,27 @@ const CocinaDashboard: React.FC = () => {
 
   const fetchMenuItems = async () => {
     try {
-      const response = await fetch('/api/admin/menu', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
-        },
-      });
-      const data = await response.json();
-      
-      if (data.success) {
-        setMenuItems(data.data.items);
-      }
+      const response = await apiService.getMenuItems();
+      setMenuItems(response.data);
     } catch (error) {
       console.error('Error fetching menu items:', error);
-      if (error.message.includes('Token expirado')) {
-        // El token expiró y no se pudo refrescar, redirigir al login
-        window.location.href = '/admin/login';
-      }
     }
   };
 
-  const getMenuItemById = (menuItemId: number) => {
-    return menuItems.find(item => item.id === menuItemId.toString());
+  const getMenuItemById = (menuItemId: string | null) => {
+    return menuItems.find(item => item.id === menuItemId);
   };
 
-  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+  const updateOrderStatus = async (orderId: Order['id'], newStatus: string) => {
     setUpdating(orderId);
     try {
-      const response = await fetch(`/api/orders/${orderId}/status`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
+      await apiService.updateOrderStatus(orderId, newStatus);
+      await fetchOrders();
+      await fetchStats();
 
-      const data = await response.json();
-      
-      if (data.success) {
-        await fetchOrders();
-        await fetchStats();
-        
-        // Cerrar modal si se completó la orden
-        if (newStatus === 'ready') {
-          setIsDetailModalOpen(false);
-          setSelectedOrder(null);
-        }
-      } else {
-        alert('Error al actualizar el estado del pedido');
+      if (newStatus === 'ready') {
+        setIsDetailModalOpen(false);
+        setSelectedOrder(null);
       }
     } catch (error) {
       console.error('Error updating order status:', error);
@@ -203,10 +207,18 @@ const CocinaDashboard: React.FC = () => {
   };
 
   const getPriorityColor = (order: Order) => {
-    const createdAt = new Date(order.createdAt);
-    const now = new Date();
-    const diffMinutes = (now.getTime() - createdAt.getTime()) / (1000 * 60);
-    
+    // Programados: la urgencia se mide contra SU hora de entrega, no contra
+    // cuándo se creó el pedido (pudo crearse días antes)
+    if (order.scheduled_for) {
+      const minutosParaEntrega = (new Date(order.scheduled_for).getTime() - ahora) / 60000;
+      if (minutosParaEntrega < 0) return 'border-red-500 bg-red-50 shadow-red-200';
+      if (minutosParaEntrega < 15) return 'border-orange-400 bg-orange-50 shadow-orange-200';
+      return 'border-gray-200 bg-white shadow-gray-200';
+    }
+
+    const createdAt = new Date(order.created_at);
+    const diffMinutes = (ahora - createdAt.getTime()) / (1000 * 60);
+
     if (diffMinutes > 30) return 'border-red-500 bg-red-50 shadow-red-200';
     if (diffMinutes > 15) return 'border-orange-400 bg-orange-50 shadow-orange-200';
     return 'border-gray-200 bg-white shadow-gray-200';
@@ -344,7 +356,7 @@ const CocinaDashboard: React.FC = () => {
             </div>
           </div>
 
-          {orders.length === 0 ? (
+          {activos.length === 0 ? (
             <div className="text-center py-12">
               <ChefHat className="w-16 h-16 text-gray-300 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No hay pedidos activos</h3>
@@ -352,7 +364,7 @@ const CocinaDashboard: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {orders.map((order) => (
+              {activos.map((order) => (
                 <div
                   key={order.id}
                   className={`rounded-xl border-2 p-6 transition-all duration-200 hover:shadow-lg hover:scale-105 ${getPriorityColor(order)}`}
@@ -361,15 +373,20 @@ const CocinaDashboard: React.FC = () => {
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-3">
                       <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white px-3 py-1 rounded-full text-lg font-bold">
-                        #{order.orderNumber}
+                        #{order.order_number}
                       </div>
+                      {order.scheduled_for && (
+                        <span className="px-3 py-1 text-xs font-bold rounded-full bg-orange-100 text-orange-700 border border-orange-300">
+                          ⏰ {new Date(order.scheduled_for).toLocaleString('es-MX', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
                       <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getStatusColor(order.status)}`}>
                         {getStatusText(order.status)}
                       </span>
                     </div>
                     <div className="text-right">
                       <div className="text-sm text-gray-500 font-medium">
-                        {formatTime(order.createdAt || order.created_at)}
+                        {formatTime(order.created_at)}
                       </div>
                       {order.status === 'pending' && (
                         <div className="flex items-center text-red-600 text-xs mt-1">
@@ -384,14 +401,14 @@ const CocinaDashboard: React.FC = () => {
                   <div className="mb-4 p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center space-x-2 mb-2">
                       <Users className="w-4 h-4 text-orange-500" />
-                      <span className="font-semibold text-gray-900">{order.customerName}</span>
+                      <span className="font-semibold text-gray-900">{order.customer_name}</span>
                     </div>
                     <div className="text-sm text-gray-600 ml-6">
-                      📞 {order.customerPhone}
+                      📞 {order.customer_phone}
                     </div>
-                    {order.deliveryAddress && (
+                    {order.delivery_address && (
                       <div className="text-sm text-gray-600 ml-6 mt-1">
-                        📍 {order.deliveryAddress}
+                        📍 {order.delivery_address}
                       </div>
                     )}
                   </div>
@@ -406,12 +423,19 @@ const CocinaDashboard: React.FC = () => {
                       {order.items && order.items.slice(0, 3).map((item, index) => {
                         const menuItem = getMenuItemById(item.menu_item_id);
                         return (
-                          <div key={index} className="flex justify-between items-center p-2 bg-white rounded-lg border">
-                            <span className="text-sm font-medium text-gray-700">
-                              {item.quantity}x {menuItem ? menuItem.name : `Producto ${item.menu_item_id}`}
-                            </span>
+                          <div key={index} className="flex justify-between items-start p-2 bg-white rounded-lg border">
+                            <div>
+                              <span className="text-sm font-medium text-gray-700">
+                                {item.quantity}x {menuItem ? menuItem.name : `Producto ${item.menu_item_id}`}
+                              </span>
+                              {(item.extras || []).length > 0 && (
+                                <p className="text-xs text-primary-600 font-semibold">
+                                  {(item.extras || []).map((e) => `+ ${e.name}`).join(' · ')}
+                                </p>
+                              )}
+                            </div>
                             <span className="text-sm font-semibold text-orange-600">
-                              {formatCurrency(parseFloat(item.price) * item.quantity)}
+                              {formatCurrency(item.total_price)}
                             </span>
                           </div>
                         );
@@ -425,10 +449,10 @@ const CocinaDashboard: React.FC = () => {
                   </div>
 
                   {/* Special Instructions */}
-                  {order.deliveryInstructions && (
+                  {order.delivery_instructions && (
                     <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
                       <div className="text-xs font-medium text-yellow-800 mb-1">📝 Instrucciones especiales:</div>
-                      <div className="text-sm text-yellow-700">{order.deliveryInstructions}</div>
+                      <div className="text-sm text-yellow-700">{order.delivery_instructions}</div>
                     </div>
                   )}
 
@@ -436,7 +460,7 @@ const CocinaDashboard: React.FC = () => {
                   <div className="flex justify-between items-center mb-4 p-3 bg-gradient-to-r from-orange-50 to-red-50 rounded-lg border border-orange-200">
                     <span className="font-bold text-gray-900">Total:</span>
                     <span className="font-bold text-xl text-orange-600">
-                      {formatCurrency(order.totalAmount || order.total)}
+                      {formatCurrency(order.total_amount)}
                     </span>
                   </div>
 
@@ -487,6 +511,64 @@ const CocinaDashboard: React.FC = () => {
               ))}
             </div>
           )}
+
+          {/* Pedidos programados en espera: entran solos a la cola activa
+              (con sonido) cuando falten MINUTOS_ACTIVACION para su hora */}
+          {programados.length > 0 && (
+            <div className="mt-10">
+              <div className="flex items-center gap-2 mb-4">
+                <Clock className="w-5 h-5 text-orange-500" />
+                <h2 className="text-lg font-bold text-gray-900">
+                  Programados para después ({programados.length})
+                </h2>
+                <span className="text-xs text-gray-500">
+                  · se activan solos {MINUTOS_ACTIVACION} min antes de su hora
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {programados.map((order) => (
+                  <div
+                    key={order.id}
+                    className="rounded-xl border-2 border-dashed border-orange-300 bg-orange-50/50 p-5"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="bg-white border border-orange-300 text-orange-700 px-3 py-1 rounded-full font-bold">
+                        #{order.order_number}
+                      </div>
+                      <span className="px-3 py-1 text-xs font-bold rounded-full bg-orange-100 text-orange-700">
+                        ⏳ faltan {faltante(order)}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-900">
+                      ⏰ {new Date(order.scheduled_for!).toLocaleString('es-MX', { weekday: 'long', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {order.customer_name} · {order.items?.length || 0} producto(s) · {formatCurrency(order.total_amount)}
+                    </p>
+                    <div className="flex gap-2 mt-4">
+                      <button
+                        onClick={() => openOrderDetail(order)}
+                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        <Eye className="w-4 h-4" />
+                        Detalles
+                      </button>
+                      {order.status === 'pending' && (
+                        <button
+                          onClick={() => updateOrderStatus(order.id, 'confirmed')}
+                          disabled={updating === order.id}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Confirmar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Order Detail Modal */}
@@ -496,7 +578,7 @@ const CocinaDashboard: React.FC = () => {
               <div className="p-6 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xl font-semibold text-gray-900">
-                    Pedido #{selectedOrder.orderNumber}
+                    Pedido #{selectedOrder.order_number}
                   </h3>
                   <button
                     onClick={() => setIsDetailModalOpen(false)}
@@ -517,11 +599,11 @@ const CocinaDashboard: React.FC = () => {
                     <div className="space-y-2">
                       <div className="flex items-center space-x-2">
                         <Users className="w-4 h-4 text-gray-400" />
-                        <span>{selectedOrder.customerName}</span>
+                        <span>{selectedOrder.customer_name}</span>
                       </div>
                       <div className="flex items-center space-x-2">
                         <span className="w-4 h-4 text-gray-400">📞</span>
-                        <span>{selectedOrder.customerPhone}</span>
+                        <span>{selectedOrder.customer_phone}</span>
                       </div>
                       <div className="flex items-center space-x-2">
                         <Clock className="w-4 h-4 text-gray-400" />
@@ -539,7 +621,7 @@ const CocinaDashboard: React.FC = () => {
                         </span>
                       </div>
                       <div className="text-sm text-gray-600">
-                        Total: <span className="font-semibold">{formatCurrency(selectedOrder.total)}</span>
+                        Total: <span className="font-semibold">{formatCurrency(selectedOrder.total_amount)}</span>
                       </div>
                     </div>
                   </div>
@@ -587,10 +669,10 @@ const CocinaDashboard: React.FC = () => {
                                   Cantidad: {item.quantity}
                                 </span>
                                 <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full font-medium">
-                                  Precio: {formatCurrency(parseFloat(item.price))}
+                                  Precio: {formatCurrency(item.unit_price)}
                                 </span>
                                 <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full font-medium">
-                                  Total: {formatCurrency(parseFloat(item.price) * item.quantity)}
+                                  Total: {formatCurrency(item.total_price)}
                                 </span>
                               </div>
                             </div>
@@ -631,10 +713,10 @@ const CocinaDashboard: React.FC = () => {
                 </div>
 
                 {/* Special Instructions */}
-                {selectedOrder.special_instructions && (
+                {selectedOrder.notes && (
                   <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                     <h4 className="font-medium text-blue-900 mb-2">Instrucciones Generales del Pedido</h4>
-                    <p className="text-blue-800">{selectedOrder.special_instructions}</p>
+                    <p className="text-blue-800">{selectedOrder.notes}</p>
                   </div>
                 )}
 

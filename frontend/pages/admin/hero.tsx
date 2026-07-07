@@ -5,19 +5,7 @@ import apiService from '../../services/api';
 import ImageUpload from '../../components/UI/ImageUpload';
 import AdminLayout from '../../components/Admin/AdminLayout';
 
-interface HeroImage {
-  id: string;
-  title: string;
-  subtitle?: string;
-  description?: string;
-  imageUrl: string;
-  ctaText: string;
-  ctaLink: string;
-  isActive: boolean;
-  sortOrder: number;
-  createdAt: string;
-  updatedAt: string;
-}
+import type { HeroImage } from '../../services/api';
 
 const HeroManagementPage = () => {
   const [heroImages, setHeroImages] = useState<HeroImage[]>([]);
@@ -32,11 +20,11 @@ const HeroManagementPage = () => {
     title: '',
     subtitle: '',
     description: '',
-    imageUrl: '',
-    ctaText: '¡Ordena Ahora!',
-    ctaLink: '/pedidos',
-    isActive: true,
-    sortOrder: 0
+    image_url: '',
+    cta_text: '¡Ordena Ahora!',
+    cta_link: '/pedidos',
+    is_active: true,
+    sort_order: 0
   });
 
   useEffect(() => {
@@ -46,8 +34,8 @@ const HeroManagementPage = () => {
   const loadHeroImages = async () => {
     try {
       setIsLoading(true);
-      const response = await apiService.getAllHeroImages();
-      if (response.success) {
+      const response = await apiService.getHeroImages();
+      if (response.ok) {
         setHeroImages(response.data);
       }
     } catch (error) {
@@ -58,7 +46,7 @@ const HeroManagementPage = () => {
   };
 
   const handleCreate = async () => {
-    if (!newHeroImage.title || !newHeroImage.imageUrl) {
+    if (!newHeroImage.title || !newHeroImage.image_url) {
       alert('Por favor completa todos los campos requeridos');
       return;
     }
@@ -66,17 +54,17 @@ const HeroManagementPage = () => {
     try {
       setIsCreating(true);
       const response = await apiService.createHeroImage(newHeroImage);
-      if (response.success) {
+      if (response.ok) {
         setShowAddModal(false);
         setNewHeroImage({
           title: '',
           subtitle: '',
           description: '',
-          imageUrl: '',
-          ctaText: '¡Ordena Ahora!',
-          ctaLink: '/pedidos',
-          isActive: true,
-          sortOrder: 0
+          image_url: '',
+          cta_text: '¡Ordena Ahora!',
+          cta_link: '/pedidos',
+          is_active: true,
+          sort_order: 0
         });
         loadHeroImages();
         alert('Imagen hero creada correctamente');
@@ -92,7 +80,7 @@ const HeroManagementPage = () => {
   };
 
   const handleEdit = async () => {
-    if (!editingImage || !editingImage.title || !editingImage.imageUrl) {
+    if (!editingImage || !editingImage.title || !editingImage.image_url) {
       alert('Por favor completa todos los campos requeridos');
       return;
     }
@@ -100,7 +88,7 @@ const HeroManagementPage = () => {
     try {
       setIsEditing(true);
       const response = await apiService.updateHeroImage(editingImage.id, editingImage);
-      if (response.success) {
+      if (response.ok) {
         setShowEditModal(false);
         setEditingImage(null);
         loadHeroImages();
@@ -123,7 +111,7 @@ const HeroManagementPage = () => {
 
     try {
       const response = await apiService.deleteHeroImage(id);
-      if (response.success) {
+      if (response.ok) {
         loadHeroImages();
         alert('Imagen hero eliminada correctamente');
       } else {
@@ -135,10 +123,10 @@ const HeroManagementPage = () => {
     }
   };
 
-  const toggleStatus = async (id: string) => {
+  const toggleStatus = async (image: HeroImage) => {
     try {
-      const response = await apiService.toggleHeroImageStatus(id);
-      if (response.success) {
+      const response = await apiService.updateHeroImage(image.id, { is_active: !image.is_active });
+      if (response.ok) {
         loadHeroImages();
       } else {
         alert('Error al cambiar el estado de la imagen hero');
@@ -198,42 +186,42 @@ const HeroManagementPage = () => {
             <div key={image.id} className="bg-white rounded-lg shadow-md overflow-hidden">
               <div className="relative">
                 <img
-                  src={image.imageUrl.startsWith('/uploads/') ? `http://localhost:5000${image.imageUrl}` : image.imageUrl}
+                  src={image.image_url}
                   alt={image.title}
                   className="w-full h-48 object-cover"
                 />
                 <div className="absolute top-2 right-2 flex space-x-1">
                   <button
-                    onClick={() => toggleStatus(image.id)}
+                    onClick={() => toggleStatus(image)}
                     className={`p-2 rounded-full ${
-                      image.isActive 
-                        ? 'bg-green-500 text-white' 
+                      image.is_active
+                        ? 'bg-green-500 text-white'
                         : 'bg-gray-500 text-white'
                     }`}
-                    title={image.isActive ? 'Desactivar' : 'Activar'}
+                    title={image.is_active ? 'Desactivar' : 'Activar'}
                   >
-                    {image.isActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    {image.is_active ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
-              
+
               <div className="p-4">
                 <h3 className="font-semibold text-lg text-gray-900 mb-2">{image.title}</h3>
                 {image.subtitle && (
                   <p className="text-sm text-gray-600 mb-2">{image.subtitle}</p>
                 )}
                 <p className="text-sm text-gray-500 mb-3 line-clamp-2">{image.description}</p>
-                
+
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs bg-primary-100 text-primary-800 px-2 py-1 rounded">
-                    Orden: {image.sortOrder}
+                    Orden: {image.sort_order}
                   </span>
                   <span className={`text-xs px-2 py-1 rounded ${
-                    image.isActive 
-                      ? 'bg-green-100 text-green-800' 
+                    image.is_active
+                      ? 'bg-green-100 text-green-800'
                       : 'bg-red-100 text-red-800'
                   }`}>
-                    {image.isActive ? 'Activo' : 'Inactivo'}
+                    {image.is_active ? 'Activo' : 'Inactivo'}
                   </span>
                 </div>
 
@@ -316,8 +304,8 @@ const HeroManagementPage = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Imagen *</label>
                 <ImageUpload
-                  value={newHeroImage.imageUrl}
-                  onChange={(url) => setNewHeroImage({...newHeroImage, imageUrl: url})}
+                  value={newHeroImage.image_url}
+                  onChange={(url) => setNewHeroImage({...newHeroImage, image_url: url})}
                   disabled={isCreating}
                 />
               </div>
@@ -327,8 +315,8 @@ const HeroManagementPage = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Texto del botón</label>
                   <input
                     type="text"
-                    value={newHeroImage.ctaText}
-                    onChange={(e) => setNewHeroImage({...newHeroImage, ctaText: e.target.value})}
+                    value={newHeroImage.cta_text}
+                    onChange={(e) => setNewHeroImage({...newHeroImage, cta_text: e.target.value})}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder="¡Ordena Ahora!"
                   />
@@ -337,8 +325,8 @@ const HeroManagementPage = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Enlace del botón</label>
                   <input
                     type="text"
-                    value={newHeroImage.ctaLink}
-                    onChange={(e) => setNewHeroImage({...newHeroImage, ctaLink: e.target.value})}
+                    value={newHeroImage.cta_link}
+                    onChange={(e) => setNewHeroImage({...newHeroImage, cta_link: e.target.value})}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder="/pedidos"
                   />
@@ -350,8 +338,8 @@ const HeroManagementPage = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Orden de visualización</label>
                   <input
                     type="number"
-                    value={newHeroImage.sortOrder}
-                    onChange={(e) => setNewHeroImage({...newHeroImage, sortOrder: parseInt(e.target.value) || 0})}
+                    value={newHeroImage.sort_order}
+                    onChange={(e) => setNewHeroImage({...newHeroImage, sort_order: parseInt(e.target.value) || 0})}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder="0"
                   />
@@ -360,8 +348,8 @@ const HeroManagementPage = () => {
                   <input
                     type="checkbox"
                     id="isActive"
-                    checked={newHeroImage.isActive}
-                    onChange={(e) => setNewHeroImage({...newHeroImage, isActive: e.target.checked})}
+                    checked={newHeroImage.is_active}
+                    onChange={(e) => setNewHeroImage({...newHeroImage, is_active: e.target.checked})}
                     className="mr-2"
                   />
                   <label htmlFor="isActive" className="text-sm font-medium text-gray-700">
@@ -434,8 +422,8 @@ const HeroManagementPage = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Imagen *</label>
                 <ImageUpload
-                  value={editingImage.imageUrl}
-                  onChange={(url) => setEditingImage({...editingImage, imageUrl: url})}
+                  value={editingImage.image_url}
+                  onChange={(url) => setEditingImage({...editingImage, image_url: url})}
                   disabled={isEditing}
                 />
               </div>
@@ -445,8 +433,8 @@ const HeroManagementPage = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Texto del botón</label>
                   <input
                     type="text"
-                    value={editingImage.ctaText}
-                    onChange={(e) => setEditingImage({...editingImage, ctaText: e.target.value})}
+                    value={editingImage.cta_text}
+                    onChange={(e) => setEditingImage({...editingImage, cta_text: e.target.value})}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder="¡Ordena Ahora!"
                   />
@@ -455,8 +443,8 @@ const HeroManagementPage = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Enlace del botón</label>
                   <input
                     type="text"
-                    value={editingImage.ctaLink}
-                    onChange={(e) => setEditingImage({...editingImage, ctaLink: e.target.value})}
+                    value={editingImage.cta_link}
+                    onChange={(e) => setEditingImage({...editingImage, cta_link: e.target.value})}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder="/pedidos"
                   />
@@ -468,8 +456,8 @@ const HeroManagementPage = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Orden de visualización</label>
                   <input
                     type="number"
-                    value={editingImage.sortOrder}
-                    onChange={(e) => setEditingImage({...editingImage, sortOrder: parseInt(e.target.value) || 0})}
+                    value={editingImage.sort_order}
+                    onChange={(e) => setEditingImage({...editingImage, sort_order: parseInt(e.target.value) || 0})}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder="0"
                   />
@@ -478,8 +466,8 @@ const HeroManagementPage = () => {
                   <input
                     type="checkbox"
                     id="editIsActive"
-                    checked={editingImage.isActive}
-                    onChange={(e) => setEditingImage({...editingImage, isActive: e.target.checked})}
+                    checked={editingImage.is_active}
+                    onChange={(e) => setEditingImage({...editingImage, is_active: e.target.checked})}
                     className="mr-2"
                   />
                   <label htmlFor="editIsActive" className="text-sm font-medium text-gray-700">

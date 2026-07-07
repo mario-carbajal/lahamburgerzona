@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import DynamicHero from '../components/UI/DynamicHero';
 import BurgerCard from '../components/Menu/BurgerCard';
+import ExtrasPicker from '../components/Menu/ExtrasPicker';
 import { useCart } from '../contexts/CartContext';
+import type { CartExtra } from '../contexts/CartContext';
 import { Star, Clock, Users, Award } from 'lucide-react';
-import apiService, { MenuItem } from '../services/api';
+import apiService, { MenuItem, MenuExtra } from '../services/api';
 
 const features = [
   {
@@ -62,8 +64,8 @@ const HomePage = () => {
   const loadFeaturedBurgers = async () => {
     try {
       setIsLoading(true);
-      const response = await apiService.getMenuItems();
-      if (response.success && response.data) {
+      const response = await apiService.getMenuItems({ activo: true });
+      if (response.ok && response.data) {
         // Filtrar hamburguesas populares
         const popularBurgers = response.data
           .filter((item: MenuItem) => item.is_popular && item.is_active);
@@ -102,13 +104,30 @@ const HomePage = () => {
     }
   };
 
-  const handleAddToCart = (burger: MenuItem) => {
+  const [extrasTarget, setExtrasTarget] = useState<{ item: MenuItem; extras: MenuExtra[] } | null>(null);
+
+  const agregarConExtras = (burger: MenuItem, extras: CartExtra[]) => {
     addToCart({
-      id: burger.id,
+      menuItemId: Number(burger.id),
       name: burger.name,
-      price: burger.price,
-      image: burger.image
+      price: Number(burger.price) + extras.reduce((s, e) => s + e.price, 0),
+      image: burger.image || '',
+      extras: extras.length > 0 ? extras : undefined,
     });
+    setExtrasTarget(null);
+  };
+
+  const handleAddToCart = async (burger: MenuItem) => {
+    try {
+      const res = await apiService.getExtras(burger.id);
+      if (res.ok && res.data.length > 0) {
+        setExtrasTarget({ item: burger, extras: res.data });
+        return;
+      }
+    } catch {
+      // sin extras disponibles: agrega directo
+    }
+    agregarConExtras(burger, []);
   };
 
   return (
@@ -259,6 +278,16 @@ const HomePage = () => {
           </div>
         </div>
       </section>
+
+      {/* Selector de extras del producto */}
+      {extrasTarget && (
+        <ExtrasPicker
+          item={extrasTarget.item}
+          extras={extrasTarget.extras}
+          onConfirm={(extras) => agregarConExtras(extrasTarget.item, extras)}
+          onClose={() => setExtrasTarget(null)}
+        />
+      )}
     </>
   );
 };

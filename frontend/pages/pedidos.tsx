@@ -1,11 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { Plus, Minus, Trash2, ShoppingCart, User, MapPin, Clock, Phone } from 'lucide-react';
 import Link from 'next/link';
 import { useCart } from '../contexts/CartContext';
+import { useBusinessInfo, whatsappLink } from '../contexts/BusinessInfoContext';
+import apiService from '../services/api';
+import { getClienteSesion } from '../utils/clienteSession';
 
 const PedidosPage = () => {
   const { state, updateQuantity, removeFromCart } = useCart();
+  const business = useBusinessInfo();
   const cartItems = state.items;
   const [customerInfo, setCustomerInfo] = useState({
     name: '',
@@ -16,24 +20,42 @@ const PedidosPage = () => {
   });
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [errors, setErrors] = useState<any>({});
-  const [emailStatus, setEmailStatus] = useState({
-    checking: false,
-    exists: false,
-    message: ''
-  });
-  const [userType, setUserType] = useState('new'); // 'new' o 'existing'
-  const [verificationStatus, setVerificationStatus] = useState({
-    checking: false,
-    verified: false,
-    message: ''
-  });
-  const [verifiedUserData, setVerifiedUserData] = useState({
-    id: null,
-    name: '',
-    email: '',
-    phone: '',
-    address: ''
-  });
+  const [paymentMethod, setPaymentMethod] = useState<'whatsapp' | 'mercadopago'>('whatsapp');
+
+  // Cupón de descuento
+  const [couponInput, setCouponInput] = useState('');
+  const [coupon, setCoupon] = useState<{ code: string; discount: number } | null>(null);
+  const [couponError, setCouponError] = useState('');
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
+
+  // Puntos de lealtad
+  const [puntos, setPuntos] = useState<{ points: number; valor_punto: number } | null>(null);
+  const [puntosCanje, setPuntosCanje] = useState(0);
+  const [isConsultandoPuntos, setIsConsultandoPuntos] = useState(false);
+
+  // Pedido programado (vacío = lo antes posible)
+  const [programado, setProgramado] = useState('');
+
+  // Con sesión de cliente activa, el formulario se prellena con sus datos
+  useEffect(() => {
+    const sesion = getClienteSesion();
+    if (!sesion) return;
+    setCustomerInfo((prev) => ({
+      ...prev,
+      name: prev.name || sesion.customer.name,
+      phone: prev.phone || sesion.customer.phone.replace(/\D/g, '').slice(-10),
+      email: prev.email || sesion.customer.email,
+      address: prev.address || sesion.customer.address || '',
+    }));
+    // Y sus puntos se consultan solos
+    if (sesion.customer.loyalty_points > 0) {
+      const digitos = sesion.customer.phone.replace(/\D/g, '').slice(-10);
+      apiService
+        .consultarPuntos(digitos)
+        .then((res) => setPuntos({ points: res.data.points, valor_punto: res.data.valor_punto }))
+        .catch(() => {});
+    }
+  }, []);
 
   const handleUpdateQuantity = (id: string, change: number) => {
     const currentItem = cartItems.find(item => item.id === id);
@@ -52,10 +74,59 @@ const PedidosPage = () => {
   };
 
   const subtotalWithTax = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const deliveryFee = subtotalWithTax >= 200 ? 0 : 30;
-  const subtotalWithoutTax = subtotalWithTax / 1.16; // Desglosar IVA del subtotal
-  const tax = subtotalWithTax - subtotalWithoutTax; // IVA desglosado
-  const total = subtotalWithTax + deliveryFee;
+  const discount = coupon ? Math.min(coupon.discount, subtotalWithTax) : 0;
+  const subtotalConDescuento = subtotalWithTax - discount;
+  const valorPunto = puntos?.valor_punto || 1;
+  const maxPuntosCanjeables = puntos
+    ? Math.min(puntos.points, Math.floor(subtotalConDescuento / valorPunto))
+    : 0;
+  const puntosAplicados = Math.min(puntosCanje, maxPuntosCanjeables);
+  const puntosDescuento = puntosAplicados * valorPunto;
+  const baseFinal = subtotalConDescuento - puntosDescuento;
+  const deliveryFee = baseFinal >= 200 ? 0 : 30;
+  const subtotalWithoutTax = baseFinal / 1.16; // Desglosar IVA del subtotal
+  const tax = baseFinal - subtotalWithoutTax; // IVA desglosado
+  const total = baseFinal + deliveryFee;
+
+  const consultarPuntos = async () => {
+    const digitos = customerInfo.phone.replace(/\D/g, '');
+    if (digitos.length !== 10) {
+      alert('Captura primero tu teléfono de 10 dígitos en el formulario');
+      return;
+    }
+    setIsConsultandoPuntos(true);
+    try {
+      const res = await apiService.consultarPuntos(digitos);
+      setPuntos({ points: res.data.points, valor_punto: res.data.valor_punto });
+      setPuntosCanje(0);
+    } catch (error: any) {
+      alert(error.message || 'No se pudo consultar el saldo de puntos');
+    } finally {
+      setIsConsultandoPuntos(false);
+    }
+  };
+
+  const aplicarCupon = async () => {
+    const codigo = couponInput.trim();
+    if (!codigo) return;
+    setIsValidatingCoupon(true);
+    setCouponError('');
+    try {
+      const res = await apiService.validateCoupon(codigo, subtotalWithTax);
+      setCoupon({ code: res.data.code, discount: res.data.discount });
+      setCouponInput('');
+    } catch (error: any) {
+      setCoupon(null);
+      setCouponError(error.message || 'No se pudo validar el cupón');
+    } finally {
+      setIsValidatingCoupon(false);
+    }
+  };
+
+  const quitarCupon = () => {
+    setCoupon(null);
+    setCouponError('');
+  };
 
   // Funciones de validación
   const validateEmail = (email) => {
@@ -95,23 +166,6 @@ const PedidosPage = () => {
     return phone;
   };
 
-  const maskData = (data, showLast = 2) => {
-    if (!data || data.length <= showLast) return data;
-    const masked = '*'.repeat(data.length - showLast);
-    return masked + data.slice(-showLast);
-  };
-
-  const maskPhone = (phone) => {
-    if (!phone) return phone;
-    const cleanPhone = phone.replace(/\D/g, '');
-    if (cleanPhone.length >= 3) {
-      const maskedLength = cleanPhone.length - 3;
-      const masked = '*'.repeat(maskedLength);
-      return `${masked}${cleanPhone.slice(-3)}`;
-    }
-    return phone;
-  };
-
   const validateForm = () => {
     console.log('🔍 Validando formulario...');
     console.log('📝 Datos a validar:', customerInfo);
@@ -144,20 +198,9 @@ const PedidosPage = () => {
       console.log('✅ Teléfono válido:', customerInfo.phone);
     }
 
-    if (!customerInfo.email.trim()) {
-      newErrors.email = 'El email es requerido';
-      console.log('❌ Email faltante');
-    } else if (!validateEmail(customerInfo.email)) {
+    if (customerInfo.email.trim() && !validateEmail(customerInfo.email)) {
       newErrors.email = 'Ingresa un email válido (ej: usuario@email.com)';
       console.log('❌ Email inválido:', customerInfo.email);
-    } else {
-      console.log('✅ Email válido:', customerInfo.email);
-    }
-
-    // Validación adicional para usuarios existentes
-    if (userType === 'existing' && emailStatus.exists && !verificationStatus.verified) {
-      newErrors.name = 'Debes verificar tus datos antes de continuar';
-      console.log('❌ Usuario existente no verificado');
     }
 
     if (!customerInfo.address.trim()) {
@@ -186,119 +229,6 @@ const PedidosPage = () => {
     }
   };
 
-  const handleEmailChange = async (e) => {
-    const email = e.target.value;
-    setCustomerInfo({...customerInfo, email: email});
-    
-    if (errors.email) {
-      setErrors({...errors, email: ''});
-    }
-
-    // Verificar email si tiene formato válido
-    if (email && validateEmail(email)) {
-      setEmailStatus({ checking: true, exists: false, message: '' });
-      
-      try {
-        const response = await fetch(`/api/customers/check-email/${encodeURIComponent(email)}`);
-        const result = await response.json();
-        
-        if (result.success) {
-          if (result.exists) {
-            setEmailStatus({
-              checking: false,
-              exists: true,
-              message: 'Este email ya está registrado. Selecciona "Soy cliente registrado" para continuar.'
-            });
-            setUserType('existing');
-          } else {
-            setEmailStatus({
-              checking: false,
-              exists: false,
-              message: 'Email disponible para nuevos clientes.'
-            });
-            setUserType('new');
-          }
-        }
-      } catch (error) {
-        console.error('Error checking email:', error);
-        setEmailStatus({
-          checking: false,
-          exists: false,
-          message: ''
-        });
-      }
-    } else if (!email) {
-      setEmailStatus({ checking: false, exists: false, message: '' });
-      setUserType('new');
-    }
-  };
-
-  const handleVerifyExistingUser = async () => {
-    if (!customerInfo.email || !customerInfo.name) {
-      setErrors({...errors, name: 'Email y nombre son requeridos para verificar'});
-      return;
-    }
-
-    setVerificationStatus({ checking: true, verified: false, message: '' });
-    
-    try {
-      const response = await fetch('/api/customers/verify', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: customerInfo.email,
-          name: customerInfo.name
-        }),
-      });
-
-      const result = await response.json();
-      
-      if (result.success && result.verified) {
-        setVerificationStatus({
-          checking: false,
-          verified: true,
-          message: '¡Datos verificados correctamente!'
-        });
-        
-        // Cargar datos del usuario verificado
-        setVerifiedUserData({
-          id: result.data.id,
-          name: result.data.name,
-          email: result.data.email,
-          phone: result.data.phone,
-          address: result.data.address
-        });
-        
-        // Auto-llenar el formulario con los datos verificados
-        setCustomerInfo(prev => ({
-          ...prev,
-          name: result.data.name,
-          phone: result.data.phone,
-          address: result.data.address
-        }));
-        
-        setErrors({...errors, name: '', email: ''});
-      } else {
-        setVerificationStatus({
-          checking: false,
-          verified: false,
-          message: result.message || 'Error en la verificación'
-        });
-        setErrors({...errors, name: result.message || 'Error en la verificación'});
-      }
-    } catch (error) {
-      console.error('Error verifying user:', error);
-      setVerificationStatus({
-        checking: false,
-        verified: false,
-        message: 'Error al verificar los datos'
-      });
-      setErrors({...errors, name: 'Error al verificar los datos'});
-    }
-  };
-
   const handleCheckout = async () => {
     console.log('🛒 Iniciando proceso de checkout...');
     console.log('📋 Datos del cliente:', customerInfo);
@@ -310,117 +240,114 @@ const PedidosPage = () => {
       return;
     }
 
+    if (programado) {
+      const t = new Date(programado).getTime();
+      if (isNaN(t) || t < Date.now() + 30 * 60 * 1000) {
+        alert('Programa tu pedido con al menos 30 minutos de anticipación');
+        return;
+      }
+    }
+
     console.log('✅ Validación del formulario exitosa');
     setIsCheckingOut(true);
     
     try {
-      // Crear el pedido en la base de datos
       const orderData = {
-        customer: {
-          name: customerInfo.name,
-          phone: customerInfo.phone,
-          address: customerInfo.address,
-          email: customerInfo.email || null
-        },
+        customer_name: customerInfo.name,
+        customer_phone: customerInfo.phone,
+        customer_email: customerInfo.email || null,
+        delivery_address: customerInfo.address,
+        delivery_instructions: customerInfo.notes || null,
+        payment_method: paymentMethod,
+        notes: customerInfo.notes || null,
+        coupon_code: coupon?.code || null,
+        redeem_points: puntosAplicados,
+        scheduled_for: programado ? new Date(programado).toISOString() : null,
         items: cartItems.map(item => ({
-          menuItemId: parseInt(item.id),
-          quantity: item.quantity
-        })),
-        deliveryInstructions: customerInfo.notes || null,
-        paymentMethod: 'whatsapp',
-        notes: customerInfo.notes || null
+          menu_item_id: item.menuItemId ?? parseInt(item.id),
+          quantity: item.quantity,
+          extra_ids: (item.extras || []).map(e => e.id)
+        }))
       };
 
-      // Enviar pedido al backend
-      const response = await fetch('/api/orders-create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(orderData),
-      });
+      const result = await apiService.createOrder(orderData);
+      const order = result.data;
+      console.log('✅ Pedido creado exitosamente');
 
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      if (paymentMethod === 'mercadopago') {
+        const preferencia = await apiService.createPaymentPreference(order.id);
+        cartItems.forEach(item => removeFromCart(item.id));
+        setCoupon(null);
+        setCustomerInfo({ name: '', phone: '', email: '', address: '', notes: '' });
+        window.location.href = preferencia.data.init_point;
+        return;
       }
 
-      const result = await response.json();
-      
-      if (result.success) {
-        console.log('✅ Pedido creado exitosamente');
-        
-        // Calcular totales locales para el mensaje de WhatsApp
-        const subtotalWithTax = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-        const deliveryFee = subtotalWithTax >= 200 ? 0 : 30;
-        const subtotalWithoutTax = subtotalWithTax / 1.16; // Desglosar IVA del subtotal
-        const tax = subtotalWithTax - subtotalWithoutTax; // IVA desglosado
-        const total = subtotalWithTax + deliveryFee;
-        
-        // Crear mensaje de WhatsApp con el número de pedido
-        const message = `🍔 *Nuevo Pedido - La Hamburguezona*
+      // Crear mensaje de WhatsApp con el número de pedido
+      const message = `🍔 *Nuevo Pedido - La Hamburguezona*
 
-*Número de Pedido:* ${result.data.orderNumber}
+*Número de Pedido:* ${order.order_number}
 *Cliente:* ${customerInfo.name}
 *Teléfono:* ${customerInfo.phone}
 *Dirección:* ${customerInfo.address}
 ${customerInfo.notes ? `*Notas:* ${customerInfo.notes}` : ''}
 
 *Pedido:*
-${cartItems.map(item => `• ${item.name} x${item.quantity} - $${(item.price * item.quantity).toFixed(2)}`).join('\n')}
+${cartItems.map(item => {
+  const extrasTxt = (item.extras || []).map(e => `\n   + ${e.name}`).join('');
+  return `• ${item.name} x${item.quantity} - $${(item.price * item.quantity).toFixed(2)}${extrasTxt}`;
+}).join('\n')}
 
 *Resumen:*
-Subtotal (sin IVA): $${subtotalWithoutTax.toFixed(2)}
-IVA (16%): $${tax.toFixed(2)}
-Envío: $${deliveryFee.toFixed(2)}
-    *Total: $${total.toFixed(2)}*
+Subtotal: $${order.subtotal.toFixed(2)}${order.discount > 0 ? `\nDescuento (${order.coupon_code}): -$${order.discount.toFixed(2)}` : ''}
+IVA incluido: $${order.tax.toFixed(2)}
+Envío: $${order.delivery_fee.toFixed(2)}
+    *Total: $${order.total_amount.toFixed(2)}*
 
 ¡Gracias por elegir La Hamburguezona! 🍔`;
 
-        const whatsappUrl = `https://wa.me/525550123?text=${encodeURIComponent(message)}`;
-        window.open(whatsappUrl, '_blank');
-        
-        // Limpiar el carrito después del pedido exitoso
-        cartItems.forEach(item => removeFromCart(item.id));
-        
-        // Limpiar información del cliente
-        setCustomerInfo({
-          name: '',
-          phone: '',
-          email: '',
-          address: '',
-          notes: ''
-        });
-        
-        // Guardar datos del pedido y redirigir a página de confirmación
-        console.log('🎫 Guardando datos del pedido...');
-        const orderConfirmationData = {
-          orderNumber: result.data.orderNumber,
-          totalAmount: total, // Usar el total calculado localmente, no el del backend
-          customerName: customerInfo.name,
-          customerPhone: customerInfo.phone,
-          customerAddress: customerInfo.address,
-          customerEmail: customerInfo.email,
-          orderTime: new Date().toLocaleString('es-MX'),
-          items: cartItems.map(item => ({
-            name: item.name,
-            quantity: item.quantity,
-            price: item.price,
-            total: item.price * item.quantity
-          })),
-          subtotal: subtotalWithoutTax,
-          deliveryFee: deliveryFee,
-          tax: tax
-        };
-        
-        // Guardar en localStorage para la página de confirmación
-        localStorage.setItem('orderConfirmation', JSON.stringify(orderConfirmationData));
-        
-        console.log('🎫 Redirigiendo a página de confirmación...');
-        // Redirigir a la página de confirmación
-        window.location.href = '/confirmacion-pedido';
-      } else {
-        throw new Error(result.error || 'Error al crear el pedido');
-      }
+      window.open(whatsappLink(business, message), '_blank');
+
+      // Limpiar el carrito después del pedido exitoso
+      cartItems.forEach(item => removeFromCart(item.id));
+      setCoupon(null);
+      setPuntos(null);
+      setPuntosCanje(0);
+      setProgramado('');
+
+      // Limpiar información del cliente
+      setCustomerInfo({
+        name: '',
+        phone: '',
+        email: '',
+        address: '',
+        notes: ''
+      });
+
+      // Guardar datos del pedido y redirigir a página de confirmación
+      const orderConfirmationData = {
+        orderNumber: order.order_number,
+        totalAmount: order.total_amount,
+        customerName: customerInfo.name,
+        customerPhone: customerInfo.phone,
+        customerAddress: customerInfo.address,
+        customerEmail: customerInfo.email,
+        orderTime: new Date().toLocaleString('es-MX'),
+        items: cartItems.map(item => ({
+          name: item.name + ((item.extras || []).length > 0 ? ` (${(item.extras || []).map(e => e.name).join(', ')})` : ''),
+          quantity: item.quantity,
+          price: item.price,
+          total: item.price * item.quantity
+        })),
+        subtotal: order.subtotal,
+        discount: order.discount,
+        couponCode: order.coupon_code,
+        deliveryFee: order.delivery_fee,
+        tax: order.tax
+      };
+
+      localStorage.setItem('orderConfirmation', JSON.stringify(orderConfirmationData));
+      window.location.href = '/confirmacion-pedido';
     } catch (error) {
       console.error('Error creating order:', error);
       alert(`Error al crear el pedido: ${error.message}. Por favor, inténtalo de nuevo.`);
@@ -498,8 +425,14 @@ Envío: $${deliveryFee.toFixed(2)}
                       />
                       <div className="flex-1">
                         <h3 className="font-semibold text-gray-900">{item.name}</h3>
-                        <p className="text-sm text-gray-600">Deliciosa hamburguesa de La Hamburguezona</p>
-                        <p className="text-lg font-bold text-primary-500">${item.price}</p>
+                        {(item.extras || []).length > 0 ? (
+                          <p className="text-sm text-primary-600">
+                            {(item.extras || []).map((e) => `+ ${e.name}`).join(' · ')}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-gray-600">Deliciosa hamburguesa de La Hamburguezona</p>
+                        )}
+                        <p className="text-lg font-bold text-primary-500">${Number(item.price).toFixed(2)}</p>
                       </div>
                       <div className="flex items-center space-x-3">
                         <button
@@ -541,11 +474,11 @@ Envío: $${deliveryFee.toFixed(2)}
                   Información de Entrega
                 </h2>
 
-                {/* Email Field - Always visible */}
-         <div className="mb-6">
-           <label className="block text-sm font-medium text-gray-700 mb-2">
-             Email *
-           </label>
+                {/* Email Field */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email (opcional)
+                  </label>
                   <div className="relative">
                     <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -553,76 +486,17 @@ Envío: $${deliveryFee.toFixed(2)}
                     <input
                       type="email"
                       value={customerInfo.email}
-                      onChange={handleEmailChange}
-                      className={`w-full pl-10 pr-12 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                        errors.email ? 'border-red-500' : 
-                        emailStatus.exists ? 'border-green-500 bg-green-50' : 
-                        emailStatus.checking ? 'border-blue-500' : 'border-gray-300'
+                      onChange={(e) => setCustomerInfo({...customerInfo, email: e.target.value})}
+                      className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                        errors.email ? 'border-red-500' : 'border-gray-300'
                       }`}
                       placeholder="tu@email.com"
-                      required
                     />
-                    {/* Indicador de estado del email */}
-                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                      {emailStatus.checking && (
-                        <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                      )}
-                      {emailStatus.exists && !emailStatus.checking && (
-                        <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
-                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </div>
-                      )}
-                      {!emailStatus.exists && !emailStatus.checking && customerInfo.email && validateEmail(customerInfo.email) && (
-                        <div className="w-5 h-5 bg-gray-400 rounded-full flex items-center justify-center">
-                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
                   </div>
                   {errors.email && (
                     <p className="mt-1 text-sm text-red-600">{errors.email}</p>
                   )}
-                  {emailStatus.message && !errors.email && (
-                    <p className={`mt-1 text-sm ${emailStatus.exists ? 'text-green-600' : 'text-blue-600'}`}>
-                      {emailStatus.message}
-                    </p>
-                  )}
                 </div>
-
-                {/* User Type Selection */}
-                {customerInfo.email && emailStatus.exists && (
-                  <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <p className="text-sm text-blue-800 mb-3">
-                      Este email ya está registrado. ¿Cómo quieres continuar?
-                    </p>
-                    <div className="flex space-x-3">
-                      <button
-                        onClick={() => setUserType('existing')}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          userType === 'existing' 
-                            ? 'bg-blue-600 text-white' 
-                            : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
-                        }`}
-                      >
-                        Soy cliente registrado
-                      </button>
-                      <button
-                        onClick={() => setUserType('new')}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          userType === 'new' 
-                            ? 'bg-green-600 text-white' 
-                            : 'bg-white text-green-600 border border-green-600 hover:bg-green-50'
-                        }`}
-                      >
-                        Nuevo pedido
-                      </button>
-                    </div>
-                  </div>
-                )}
 
                 <div className="space-y-4">
                   {/* Nombre Field */}
@@ -637,8 +511,7 @@ Envío: $${deliveryFee.toFixed(2)}
                         value={customerInfo.name}
                         onChange={(e) => setCustomerInfo({...customerInfo, name: e.target.value})}
                         className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                          errors.name ? 'border-red-500' : 
-                          verificationStatus.verified ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                          errors.name ? 'border-red-500' : 'border-gray-300'
                         }`}
                         placeholder="Tu nombre completo"
                         required
@@ -647,43 +520,7 @@ Envío: $${deliveryFee.toFixed(2)}
                     {errors.name && (
                       <p className="mt-1 text-sm text-red-600">{errors.name}</p>
                     )}
-                    {verificationStatus.verified && !errors.name && (
-                      <div className="mt-2 p-3 bg-green-50 rounded-lg border border-green-200">
-                        <p className="text-sm text-green-800">
-                          <span className="font-medium">✓ Usuario verificado:</span> {verifiedUserData.name}
-                        </p>
-                        <p className="text-xs text-green-600 mt-1">
-                          Todos tus datos han sido cargados y verificados. Puedes proceder con tu pedido.
-                        </p>
-                      </div>
-                    )}
-                    {verificationStatus.message && !verificationStatus.verified && (
-                      <p className="mt-1 text-sm text-red-600">{verificationStatus.message}</p>
-                    )}
                   </div>
-
-                  {/* Botón de verificación para usuarios existentes */}
-                  {userType === 'existing' && emailStatus.exists && !verificationStatus.verified && (
-                    <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                      <p className="text-sm text-yellow-800 mb-3">
-                        Para continuar como cliente registrado, verifica tus datos:
-                      </p>
-                      <button
-                        onClick={handleVerifyExistingUser}
-                        disabled={verificationStatus.checking || !customerInfo.name}
-                        className="btn-primary text-sm px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {verificationStatus.checking ? (
-                          <div className="flex items-center space-x-2">
-                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                            <span>Verificando...</span>
-                          </div>
-                        ) : (
-                          'Verificar Datos'
-                        )}
-                      </button>
-                    </div>
-                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -693,12 +530,10 @@ Envío: $${deliveryFee.toFixed(2)}
                       <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                       <input
                         type="tel"
-                        value={verificationStatus.verified ? maskPhone(verifiedUserData.phone) : customerInfo.phone}
-                        onChange={verificationStatus.verified ? undefined : handlePhoneChange}
-                        readOnly={verificationStatus.verified}
+                        value={customerInfo.phone}
+                        onChange={handlePhoneChange}
                         className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                          errors.phone ? 'border-red-500' : 
-                          verificationStatus.verified ? 'border-green-500 bg-green-100 cursor-not-allowed' : 'border-gray-300'
+                          errors.phone ? 'border-red-500' : 'border-gray-300'
                         }`}
                         placeholder="5551234567"
                         maxLength={10}
@@ -708,7 +543,7 @@ Envío: $${deliveryFee.toFixed(2)}
                     {errors.phone && (
                       <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
                     )}
-                    {!errors.phone && customerInfo.phone && !verificationStatus.verified && (
+                    {!errors.phone && customerInfo.phone && (
                       <div className="mt-1">
                         <p className="text-sm text-gray-600">
                           Dígitos: {customerInfo.phone.length}/10
@@ -723,18 +558,7 @@ Envío: $${deliveryFee.toFixed(2)}
                         )}
                       </div>
                     )}
-                    {verificationStatus.verified && !errors.phone && (
-                      <div className="mt-2 p-3 bg-green-50 rounded-lg border border-green-200">
-                        <p className="text-sm text-green-800">
-                          <span className="font-medium">✓ Teléfono verificado:</span> {maskPhone(verifiedUserData.phone)}
-                        </p>
-                        <p className="text-xs text-green-600 mt-1">
-                          Tu número de teléfono está verificado y protegido. No se puede modificar.
-                        </p>
-                      </div>
-                    )}
                   </div>
-
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -746,8 +570,7 @@ Envío: $${deliveryFee.toFixed(2)}
                         value={customerInfo.address}
                         onChange={(e) => setCustomerInfo({...customerInfo, address: e.target.value})}
                         className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                          errors.address ? 'border-red-500' : 
-                          verificationStatus.verified ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                          errors.address ? 'border-red-500' : 'border-gray-300'
                         }`}
                         placeholder="Calle, número, colonia, ciudad..."
                         rows={3}
@@ -756,16 +579,6 @@ Envío: $${deliveryFee.toFixed(2)}
                     </div>
                     {errors.address && (
                       <p className="mt-1 text-sm text-red-600">{errors.address}</p>
-                    )}
-                    {verificationStatus.verified && !errors.address && (
-                      <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                        <p className="text-sm text-blue-800">
-                          <span className="font-medium">✓ Dirección registrada:</span> {maskData(verifiedUserData.address, 10)}
-                        </p>
-                        <p className="text-xs text-blue-600 mt-1">
-                          Puedes modificar la dirección para este pedido si es necesario.
-                        </p>
-                      </div>
                     )}
                   </div>
 
@@ -794,30 +607,156 @@ Envío: $${deliveryFee.toFixed(2)}
 
                 <div className="space-y-4">
                   {cartItems.map((item) => (
-                    <div key={item.id} className="flex justify-between items-center">
+                    <div key={item.id} className="flex justify-between items-start">
                       <div>
                         <p className="font-medium text-gray-900">{item.name}</p>
+                        {(item.extras || []).length > 0 && (
+                          <p className="text-xs text-primary-600">
+                            {(item.extras || []).map((e) => `+ ${e.name}`).join(' · ')}
+                          </p>
+                        )}
                         <p className="text-sm text-gray-600">x{item.quantity}</p>
                       </div>
-                      <p className="font-semibold">${item.price * item.quantity}</p>
+                      <p className="font-semibold">${(item.price * item.quantity).toFixed(2)}</p>
                     </div>
                   ))}
                 </div>
 
-                <div className="border-t border-gray-200 pt-4 space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Subtotal (sin IVA)</span>
-                    <span className="font-semibold">${subtotalWithoutTax.toFixed(2)}</span>
+                {/* Cupón de descuento */}
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  {coupon ? (
+                    <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                      <p className="text-sm text-green-700 font-medium">
+                        Cupón <span className="font-bold">{coupon.code}</span> aplicado
+                      </p>
+                      <button onClick={quitarCupon} className="text-xs text-red-500 hover:underline">
+                        Quitar
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={couponInput}
+                          onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                          onKeyDown={(e) => e.key === 'Enter' && aplicarCupon()}
+                          placeholder="¿Tienes un cupón?"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent uppercase"
+                        />
+                        <button
+                          onClick={aplicarCupon}
+                          disabled={isValidatingCoupon || !couponInput.trim()}
+                          className="px-4 py-2 text-sm font-medium text-primary-600 border border-primary-300 rounded-lg hover:bg-primary-50 disabled:opacity-50 transition-colors"
+                        >
+                          {isValidatingCoupon ? '...' : 'Aplicar'}
+                        </button>
+                      </div>
+                      {couponError && <p className="mt-1 text-xs text-red-600">{couponError}</p>}
+                    </>
+                  )}
+                </div>
+
+                {/* Puntos de lealtad */}
+                <div className="mt-3">
+                  {puntos === null ? (
+                    <button
+                      onClick={consultarPuntos}
+                      disabled={isConsultandoPuntos}
+                      className="w-full px-3 py-2 text-sm font-medium text-secondary-700 bg-secondary-50 border border-secondary-200 rounded-lg hover:bg-secondary-100 disabled:opacity-50 transition-colors"
+                    >
+                      {isConsultandoPuntos ? 'Consultando...' : '⭐ Consultar mis puntos de lealtad'}
+                    </button>
+                  ) : puntos.points === 0 ? (
+                    <p className="text-xs text-gray-500 text-center">
+                      Aún no tienes puntos. Deja tu email en el formulario y gana 1 punto por cada $10 de compra.
+                    </p>
+                  ) : (
+                    <div className="bg-secondary-50 border border-secondary-200 rounded-lg p-3 space-y-2">
+                      <p className="text-sm font-medium text-secondary-800">
+                        ⭐ Tienes {puntos.points} puntos (valen ${(puntos.points * valorPunto).toFixed(2)})
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={0}
+                          max={maxPuntosCanjeables}
+                          value={puntosCanje === 0 ? '' : puntosCanje}
+                          onChange={(e) => setPuntosCanje(Math.max(0, Math.min(maxPuntosCanjeables, Number(e.target.value) || 0)))}
+                          placeholder="0"
+                          className="w-24 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                        />
+                        <span className="text-xs text-gray-600">puntos a canjear (máx. {maxPuntosCanjeables})</span>
+                        <button
+                          onClick={() => setPuntosCanje(maxPuntosCanjeables)}
+                          className="ml-auto text-xs text-primary-600 hover:underline"
+                        >
+                          Usar todos
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ¿Para cuándo? */}
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">¿Para cuándo lo quieres?</label>
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => setProgramado('')}
+                      className={`w-full px-3 py-2 text-sm text-left border rounded-lg transition-colors ${
+                        !programado ? 'border-primary-500 bg-primary-50 font-medium' : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      🚀 Lo antes posible
+                    </button>
+                    <div
+                      className={`px-3 py-2 border rounded-lg transition-colors ${
+                        programado ? 'border-primary-500 bg-primary-50' : 'border-gray-300'
+                      }`}
+                    >
+                      <label className="block text-xs text-gray-500 mb-1">📅 Programar para:</label>
+                      <input
+                        type="datetime-local"
+                        value={programado}
+                        min={new Date(Date.now() + 30 * 60 * 1000).toISOString().slice(0, 16)}
+                        onChange={(e) => setProgramado(e.target.value)}
+                        className="w-full text-sm bg-transparent focus:outline-none"
+                      />
+                      {programado && (
+                        <p className="text-xs text-gray-500 mt-1">Mínimo 30 min de anticipación, máximo 7 días.</p>
+                      )}
+                    </div>
                   </div>
+                </div>
+
+                <div className="border-t border-gray-200 pt-4 mt-4 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Subtotal</span>
+                    <span className="font-semibold">${subtotalWithTax.toFixed(2)}</span>
+                  </div>
+                  {discount > 0 && (
+                    <div className="flex justify-between text-green-600">
+                      <span>Descuento ({coupon?.code})</span>
+                      <span className="font-semibold">-${discount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {puntosDescuento > 0 && (
+                    <div className="flex justify-between text-secondary-600">
+                      <span>Puntos canjeados ({puntosAplicados})</span>
+                      <span className="font-semibold">-${puntosDescuento.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-gray-600">Envío</span>
                     <span className="font-semibold">
                       {deliveryFee === 0 ? 'Gratis' : `$${deliveryFee}`}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">IVA (16%)</span>
-                    <span className="font-semibold">${tax.toFixed(2)}</span>
+                  <div className="flex justify-between text-sm text-gray-400">
+                    <span>IVA incluido (16%)</span>
+                    <span>${tax.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-xl font-bold text-primary-500 pt-2 border-t border-gray-200">
                     <span>Total</span>
@@ -825,13 +764,55 @@ Envío: $${deliveryFee.toFixed(2)}
                   </div>
                 </div>
 
-                {subtotalWithTax < 200 && (
+                {baseFinal < 200 && (
                   <div className="mt-4 p-3 bg-secondary-50 border border-secondary-200 rounded-lg">
                     <p className="text-sm text-secondary-700">
-                      💡 ¡Agrega $${(200 - subtotalWithTax).toFixed(2)} más para envío gratis!
+                      💡 ¡Agrega ${(200 - baseFinal).toFixed(2)} más para envío gratis!
                     </p>
                   </div>
                 )}
+
+                <div className="mt-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Método de pago
+                  </label>
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('whatsapp')}
+                      className={`w-full flex items-center justify-between px-4 py-3 border rounded-lg text-left transition-colors ${
+                        paymentMethod === 'whatsapp'
+                          ? 'border-primary-500 bg-primary-50'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      <div>
+                        <p className="font-medium text-gray-900">Efectivo o transferencia</p>
+                        <p className="text-xs text-gray-500">Confirmas tu pedido por WhatsApp</p>
+                      </div>
+                      {paymentMethod === 'whatsapp' && (
+                        <span className="w-4 h-4 rounded-full bg-primary-500 shrink-0" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('mercadopago')}
+                      className={`w-full flex items-center justify-between px-4 py-3 border rounded-lg text-left transition-colors ${
+                        paymentMethod === 'mercadopago'
+                          ? 'border-primary-500 bg-primary-50'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      <div>
+                        <p className="font-medium text-gray-900">Pagar en línea con tarjeta</p>
+                        <p className="text-xs text-gray-500">Serás redirigido a Mercado Pago</p>
+                      </div>
+                      {paymentMethod === 'mercadopago' && (
+                        <span className="w-4 h-4 rounded-full bg-primary-500 shrink-0" />
+                      )}
+                    </button>
+                  </div>
+                </div>
 
                 <div className="mt-6 space-y-4">
                   <button
@@ -844,6 +825,11 @@ Envío: $${deliveryFee.toFixed(2)}
                         <Clock className="w-5 h-5 mr-2 animate-spin" />
                         Procesando...
                       </>
+                    ) : paymentMethod === 'mercadopago' ? (
+                      <>
+                        <ShoppingCart className="w-5 h-5 mr-2" />
+                        Pagar Ahora
+                      </>
                     ) : (
                       <>
                         <Phone className="w-5 h-5 mr-2" />
@@ -854,7 +840,9 @@ Envío: $${deliveryFee.toFixed(2)}
 
                   <div className="text-center">
                     <p className="text-sm text-gray-600">
-                      Al continuar, serás redirigido a WhatsApp para completar tu pedido
+                      {paymentMethod === 'mercadopago'
+                        ? 'Serás redirigido a Mercado Pago para completar tu pago'
+                        : 'Al continuar, serás redirigido a WhatsApp para completar tu pedido'}
                     </p>
                   </div>
                 </div>

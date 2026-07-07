@@ -1,8 +1,18 @@
 import React, { useState } from 'react';
 import Head from 'next/head';
 import { MapPin, Phone, Mail, Clock, Send, MessageCircle } from 'lucide-react';
+import { useBusinessInfo, whatsappLink, phoneLink } from '../contexts/BusinessInfoContext';
+import apiService from '../services/api';
+
+// El backend clasifica los mensajes por tipo (se filtran así en /admin/messages)
+const TIPO_POR_ASUNTO: Record<string, string> = {
+  queja: 'complaint',
+  sugerencia: 'suggestion',
+  otro: 'other',
+};
 
 const ContactoPage = () => {
+  const business = useBusinessInfo();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -16,24 +26,28 @@ const ContactoPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    
-    // Simular envío del formulario
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    setIsSubmitting(false);
-    setIsSubmitted(true);
-    
-    // Resetear formulario después de 3 segundos
-    setTimeout(() => {
-      setIsSubmitted(false);
-      setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        subject: '',
-        message: ''
+
+    try {
+      await apiService.createContactMessage({
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone || null,
+        subject: formData.subject || 'Contacto general',
+        message: formData.message,
+        type: TIPO_POR_ASUNTO[formData.subject] || 'contact',
       });
-    }, 3000);
+
+      setIsSubmitted(true);
+      setTimeout(() => {
+        setIsSubmitted(false);
+        setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
+      }, 3000);
+    } catch (error: any) {
+      console.error('Error sending contact message:', error);
+      alert(error.message || 'No se pudo enviar el mensaje. Intenta de nuevo.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -47,50 +61,38 @@ const ContactoPage = () => {
     {
       icon: MapPin,
       title: 'Dirección',
-      content: 'Av. Principal 123, Centro Histórico, Ciudad de México',
+      content: business.address,
+      href: `https://www.google.com/maps/search/${encodeURIComponent(business.address)}`,
       action: 'Ver en Google Maps'
     },
     {
       icon: Phone,
       title: 'Teléfono',
-      content: '+52 55 5555 0123',
+      content: business.phone,
+      href: phoneLink(business),
       action: 'Llamar ahora'
     },
     {
       icon: Mail,
       title: 'Email',
-      content: 'contacto@lahamburguezona.com',
+      content: business.email,
+      href: `mailto:${business.email}`,
       action: 'Enviar email'
     },
     {
       icon: Clock,
       title: 'Horarios',
-      content: 'Lun-Dom: 11:00 AM - 11:00 PM',
-      action: 'Ver horarios'
+      content: business.openingHours,
+      href: null,
+      action: null
     }
   ];
 
   const socialLinks = [
-    {
-      name: 'Facebook',
-      url: 'https://facebook.com/lahamburguezona',
-      icon: '📘'
-    },
-    {
-      name: 'Instagram',
-      url: 'https://instagram.com/lahamburguezona',
-      icon: '📷'
-    },
-    {
-      name: 'WhatsApp',
-      url: 'https://wa.me/525555550123',
-      icon: '💬'
-    },
-    {
-      name: 'TikTok',
-      url: 'https://tiktok.com/@lahamburguezona',
-      icon: '🎵'
-    }
+    ...(business.facebookUrl
+      ? [{ name: 'Facebook', url: business.facebookUrl, icon: '📘' }]
+      : []),
+    { name: 'WhatsApp', url: whatsappLink(business), icon: '💬' },
   ];
 
   return (
@@ -141,9 +143,16 @@ const ContactoPage = () => {
                       <p className="text-gray-600 mb-3">
                         {info.content}
                       </p>
-                      <button className="text-primary-500 hover:text-primary-600 font-medium text-sm">
-                        {info.action}
-                      </button>
+                      {info.href && info.action && (
+                        <a
+                          href={info.href}
+                          target={info.href.startsWith('http') ? '_blank' : undefined}
+                          rel={info.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+                          className="text-primary-500 hover:text-primary-600 font-medium text-sm"
+                        >
+                          {info.action}
+                        </a>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -185,7 +194,7 @@ const ContactoPage = () => {
                     Escríbenos por WhatsApp y te responderemos al instante
                   </p>
                   <a
-                    href="https://wa.me/525555550123?text=Hola, me gustaría información sobre..."
+                    href={whatsappLink(business, 'Hola, me gustaría información sobre...')}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center space-x-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors duration-200"
@@ -243,7 +252,7 @@ const ContactoPage = () => {
                       value={formData.phone}
                       onChange={handleChange}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="+52 555-0123"
+                      placeholder="228 123 4567"
                     />
                   </div>
                 </div>
@@ -321,22 +330,21 @@ const ContactoPage = () => {
         </div>
       </div>
 
-      {/* Mapa (placeholder) */}
+      {/* Mapa */}
       <section className="bg-gray-100 py-16">
         <div className="container-custom">
           <h2 className="text-3xl font-bold text-gray-900 text-center mb-8">
             Encuéntranos Aquí
           </h2>
-          <div className="bg-gray-300 rounded-xl h-96 flex items-center justify-center">
-            <div className="text-center">
-              <MapPin className="w-16 h-16 text-gray-500 mx-auto mb-4" />
-              <p className="text-gray-600 text-lg">
-                Mapa interactivo de Google Maps
-              </p>
-              <p className="text-gray-500 text-sm mt-2">
-                Av. Principal 123, Centro Histórico, Ciudad de México
-              </p>
-            </div>
+          <div className="rounded-xl overflow-hidden shadow-lg h-96">
+            <iframe
+              title="Ubicación de La Hamburguezona"
+              src={`https://www.google.com/maps?q=${encodeURIComponent(business.address)}&output=embed`}
+              className="w-full h-full border-0"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              allowFullScreen
+            />
           </div>
         </div>
       </section>

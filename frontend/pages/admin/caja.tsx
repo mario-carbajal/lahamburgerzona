@@ -3,15 +3,24 @@ import Head from 'next/head';
 import { CreditCard, DollarSign, Receipt, CheckCircle, AlertCircle, TrendingUp, Users } from 'lucide-react';
 import AdminLayout from '../../components/Admin/AdminLayout';
 import { withAuth } from '../../middleware/auth';
+import apiService from '../../services/api';
+import type { Order } from '../../services/api';
+
+interface CashierStats {
+  today_revenue: number;
+  pending_payments: number;
+  completed_payments: number;
+  avg_order_value: number;
+}
 
 const CajaPage = () => {
-  const [orders, setOrders] = useState([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState({
-    todayRevenue: 0,
-    pendingPayments: 0,
-    completedPayments: 0,
-    avgOrderValue: 0
+  const [stats, setStats] = useState<CashierStats>({
+    today_revenue: 0,
+    pending_payments: 0,
+    completed_payments: 0,
+    avg_order_value: 0
   });
 
   useEffect(() => {
@@ -21,18 +30,9 @@ const CajaPage = () => {
 
   const fetchOrders = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('/api/orders?status=pending,completed,delivered&limit=20', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setOrders(data.data || []);
-      }
+      setIsLoading(true);
+      const response = await apiService.getOrders();
+      setOrders(response.data);
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
@@ -42,65 +42,35 @@ const CajaPage = () => {
 
   const fetchStats = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('/api/reports/cashier-stats', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data.data || stats);
-      }
+      const response = await apiService.getReport('caja');
+      setStats(response.data as CashierStats);
     } catch (error) {
       console.error('Error fetching stats:', error);
     }
   };
 
-  const updateOrderStatus = async (orderId, newStatus) => {
-    try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`/api/orders/${orderId}/status`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      if (response.ok) {
-        fetchOrders(); // Refrescar lista
-        fetchStats(); // Refrescar estadísticas
-      }
-    } catch (error) {
-      console.error('Error updating order:', error);
-    }
-  };
-
-  const getStatusColor = (status) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'delivered': return 'bg-purple-100 text-purple-800';
+      case 'delivered': return 'bg-green-100 text-green-800';
       case 'cancelled': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      default: return 'bg-blue-100 text-blue-800';
     }
   };
 
-  const getStatusText = (status) => {
+  const getStatusText = (status: string) => {
     switch (status) {
-      case 'pending': return 'Pendiente Pago';
-      case 'completed': return 'Pagado';
+      case 'pending': return 'Pendiente';
+      case 'confirmed': return 'Confirmado';
+      case 'preparing': return 'Preparando';
+      case 'ready': return 'Listo';
       case 'delivered': return 'Entregado';
       case 'cancelled': return 'Cancelado';
       default: return status;
     }
   };
 
-  const formatCurrency = (amount) => {
+  const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-MX', {
       style: 'currency',
       currency: 'MXN'
@@ -110,28 +80,28 @@ const CajaPage = () => {
   const statCards = [
     {
       title: 'Ingresos Hoy',
-      value: formatCurrency(stats.todayRevenue),
+      value: formatCurrency(stats.today_revenue),
       icon: DollarSign,
       color: 'bg-green-500',
       change: 'Total del día'
     },
     {
       title: 'Pagos Pendientes',
-      value: stats.pendingPayments,
+      value: stats.pending_payments,
       icon: CreditCard,
       color: 'bg-yellow-500',
       change: 'Esperando confirmación'
     },
     {
       title: 'Pagos Completados',
-      value: stats.completedPayments,
+      value: stats.completed_payments,
       icon: CheckCircle,
       color: 'bg-blue-500',
       change: 'Procesados exitosamente'
     },
     {
       title: 'Ticket Promedio',
-      value: formatCurrency(stats.avgOrderValue),
+      value: formatCurrency(stats.avg_order_value),
       icon: TrendingUp,
       color: 'bg-purple-500',
       change: 'Valor por pedido'
@@ -253,7 +223,7 @@ const CajaPage = () => {
                                   {item.quantity}x {item.menu_item_name}
                                 </span>
                                 <span className="text-gray-500">
-                                  {formatCurrency(item.price)}
+                                  {formatCurrency(item.total_price)}
                                 </span>
                               </div>
                             ))}
@@ -263,14 +233,6 @@ const CajaPage = () => {
 
                       {/* Action Buttons */}
                       <div className="flex flex-col space-y-2 ml-6">
-                        {order.status === 'pending' && (
-                          <button
-                            onClick={() => updateOrderStatus(order.id, 'completed')}
-                            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                          >
-                            Confirmar Pago
-                          </button>
-                        )}
                         <button
                           onClick={() => {/* Generar factura */}}
                           className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"

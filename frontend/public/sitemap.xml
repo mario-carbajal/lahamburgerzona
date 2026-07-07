@@ -1,46 +1,38 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://lahamburguezona.com/</loc>
-    <lastmod>2024-01-15</lastmod>
+    <loc>https://hamburguezona.com/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://lahamburguezona.com/menu</loc>
-    <lastmod>2024-01-15</lastmod>
+    <loc>https://hamburguezona.com/menu</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://lahamburguezona.com/pedidos</loc>
-    <lastmod>2024-01-15</lastmod>
+    <loc>https://hamburguezona.com/pedidos</loc>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://lahamburguezona.com/galeria</loc>
-    <lastmod>2024-01-15</lastmod>
+    <loc>https://hamburguezona.com/galeria</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://lahamburguezona.com/contacto</loc>
-    <lastmod>2024-01-15</lastmod>
+    <loc>https://hamburguezona.com/contacto</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://lahamburguezona.com/opiniones</loc>
-    <lastmod>2024-01-15</lastmod>
+    <loc>https://hamburguezona.com/opiniones</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://lahamburguezona.com/nosotros</loc>
-    <lastmod>2024-01-15</lastmod>
+    <loc>https://hamburguezona.com/nosotros</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
 </urlset>
-

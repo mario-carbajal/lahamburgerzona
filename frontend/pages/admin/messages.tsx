@@ -1,39 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import AdminLayout from '../../components/Admin/AdminLayout';
-import { 
-  MessageSquare, 
-  Search, 
+import apiService from '../../services/api';
+import type { ContactMessage } from '../../services/api';
+import {
+  MessageSquare,
+  Search,
   Filter,
   Reply,
-  Trash2,
   Mail,
   Phone,
   Calendar,
   Check,
-  Clock,
   X
 } from 'lucide-react';
 
-interface Message {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  subject: string;
-  message: string;
-  status: 'unread' | 'read' | 'replied';
-  createdAt: string;
-  type: 'contact' | 'complaint' | 'suggestion' | 'other';
-}
-
 const AdminMessages = () => {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [filteredMessages, setFilteredMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ContactMessage[]>([]);
+  const [filteredMessages, setFilteredMessages] = useState<ContactMessage[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
-  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -46,59 +34,12 @@ const AdminMessages = () => {
 
   const loadMessages = async () => {
     try {
-      // TODO: Reemplazar con llamada real a la API
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const mockMessages: Message[] = [
-        {
-          id: '1',
-          name: 'María González',
-          email: 'maria@email.com',
-          phone: '+52 555-0123',
-          subject: 'Consulta sobre delivery',
-          message: 'Hola, ¿hacen delivery a la zona de Polanco? ¿Cuál es el tiempo de entrega estimado?',
-          status: 'unread',
-          createdAt: '2025-09-16T19:30:00Z',
-          type: 'contact'
-        },
-        {
-          id: '2',
-          name: 'Carlos Ruiz',
-          email: 'carlos@email.com',
-          phone: '+52 555-0456',
-          subject: 'Queja sobre pedido',
-          message: 'Mi pedido llegó tarde y la hamburguesa estaba fría. Necesitan mejorar el empaque térmico.',
-          status: 'read',
-          createdAt: '2025-09-16T18:45:00Z',
-          type: 'complaint'
-        },
-        {
-          id: '3',
-          name: 'Ana Martínez',
-          email: 'ana@email.com',
-          phone: '+52 555-0789',
-          subject: 'Sugerencia de menú',
-          message: 'Me encantaría que agreguen una opción vegetariana al menú. ¿Tienen planes de incluir hamburguesas de soya?',
-          status: 'replied',
-          createdAt: '2025-09-16T17:20:00Z',
-          type: 'suggestion'
-        },
-        {
-          id: '4',
-          name: 'Pedro López',
-          email: 'pedro@email.com',
-          phone: '+52 555-0321',
-          subject: 'Felicitaciones',
-          message: 'Excelente servicio y calidad. Las hamburguesas están deliciosas. ¡Sigan así!',
-          status: 'read',
-          createdAt: '2025-09-16T16:15:00Z',
-          type: 'other'
-        }
-      ];
-
-      setMessages(mockMessages);
+      setIsLoading(true);
+      const response = await apiService.getContactMessages();
+      setMessages(response.data);
     } catch (error) {
       console.error('Error loading messages:', error);
+      setMessages([]);
     } finally {
       setIsLoading(false);
     }
@@ -126,29 +67,19 @@ const AdminMessages = () => {
     setFilteredMessages(filtered);
   };
 
-  const updateMessageStatus = async (messageId: string, newStatus: Message['status']) => {
+  const updateMessageStatus = async (messageId: ContactMessage['id'], newStatus: string) => {
     try {
-      // TODO: Implementar actualización real
+      await apiService.updateContactStatus(messageId, newStatus);
       setMessages(messages.map(message =>
         message.id === messageId ? { ...message, status: newStatus } : message
       ));
     } catch (error) {
       console.error('Error updating message status:', error);
+      alert('Error al actualizar el mensaje');
     }
   };
 
-  const deleteMessage = async (messageId: string) => {
-    if (confirm('¿Estás seguro de que quieres eliminar este mensaje?')) {
-      try {
-        // TODO: Implementar eliminación real
-        setMessages(messages.filter(message => message.id !== messageId));
-      } catch (error) {
-        console.error('Error deleting message:', error);
-      }
-    }
-  };
-
-  const getStatusColor = (status: Message['status']) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'unread': return 'bg-red-100 text-red-800';
       case 'read': return 'bg-blue-100 text-blue-800';
@@ -157,7 +88,7 @@ const AdminMessages = () => {
     }
   };
 
-  const getStatusText = (status: Message['status']) => {
+  const getStatusText = (status: string) => {
     switch (status) {
       case 'unread': return 'No leído';
       case 'read': return 'Leído';
@@ -166,7 +97,7 @@ const AdminMessages = () => {
     }
   };
 
-  const getTypeColor = (type: Message['type']) => {
+  const getTypeColor = (type: string) => {
     switch (type) {
       case 'contact': return 'bg-blue-100 text-blue-800';
       case 'complaint': return 'bg-red-100 text-red-800';
@@ -176,7 +107,7 @@ const AdminMessages = () => {
     }
   };
 
-  const getTypeText = (type: Message['type']) => {
+  const getTypeText = (type: string) => {
     switch (type) {
       case 'contact': return 'Contacto';
       case 'complaint': return 'Queja';
@@ -301,7 +232,7 @@ const AdminMessages = () => {
                       </div>
                       <div className="flex items-center space-x-1">
                         <Calendar className="w-4 h-4" />
-                        <span>{formatDate(message.createdAt)} {formatTime(message.createdAt)}</span>
+                        <span>{formatDate(message.created_at)} {formatTime(message.created_at)}</span>
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -341,13 +272,6 @@ const AdminMessages = () => {
                       <Check className="w-5 h-5" />
                     </button>
                   )}
-                  <button
-                    onClick={() => deleteMessage(message.id)}
-                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Eliminar mensaje"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
                 </div>
               </div>
             </div>
@@ -391,7 +315,7 @@ const AdminMessages = () => {
                     <p><span className="font-medium">Email:</span> {selectedMessage.email}</p>
                     <p><span className="font-medium">Teléfono:</span> {selectedMessage.phone}</p>
                     <p><span className="font-medium">Tipo:</span> {getTypeText(selectedMessage.type)}</p>
-                    <p><span className="font-medium">Fecha:</span> {formatDate(selectedMessage.createdAt)} {formatTime(selectedMessage.createdAt)}</p>
+                    <p><span className="font-medium">Fecha:</span> {formatDate(selectedMessage.created_at)} {formatTime(selectedMessage.created_at)}</p>
                   </div>
                 </div>
 

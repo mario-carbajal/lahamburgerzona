@@ -1,9 +1,11 @@
 import React from 'react';
 import Link from 'next/link';
-import { Phone, MapPin, Mail, Clock, Facebook, Instagram, Twitter, MessageCircle } from 'lucide-react';
+import { Phone, MapPin, Mail, Clock, Facebook, MessageCircle } from 'lucide-react';
+import { useBusinessInfo, whatsappLink } from '../../contexts/BusinessInfoContext';
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
+  const business = useBusinessInfo();
 
   return (
     <footer className="bg-dark-900 text-white">
@@ -12,12 +14,20 @@ const Footer = () => {
           {/* Información de la empresa */}
           <div className="space-y-4">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-gradient-warm rounded-full flex items-center justify-center">
-                <span className="text-white font-bold text-xl">🍔</span>
-              </div>
+              {business.logoUrl ? (
+                <img
+                  src={business.logoUrl}
+                  alt={`Logo de ${business.name}`}
+                  className="w-12 h-12 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-12 h-12 bg-gradient-warm rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-xl">🍔</span>
+                </div>
+              )}
               <div>
-                <h3 className="text-xl font-bold">La Hamburguezona</h3>
-                <p className="text-gray-400 text-sm">¡Sabor que conquista!</p>
+                <h3 className="text-xl font-bold">{business.name}</h3>
+                <p className="text-gray-400 text-sm">{business.slogan}</p>
               </div>
             </div>
             <p className="text-gray-400 text-sm leading-relaxed">
@@ -25,15 +35,17 @@ const Footer = () => {
               Calidad, frescura y sabor en cada bocado.
             </p>
             <div className="flex space-x-4">
-              <a href="#" className="text-gray-400 hover:text-white transition-colors">
-                <Facebook className="w-5 h-5" />
-              </a>
-              <a href="#" className="text-gray-400 hover:text-white transition-colors">
-                <Instagram className="w-5 h-5" />
-              </a>
-              <a href="#" className="text-gray-400 hover:text-white transition-colors">
-                <Twitter className="w-5 h-5" />
-              </a>
+              {business.facebookUrl && (
+                <a
+                  href={business.facebookUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-400 hover:text-white transition-colors"
+                  aria-label="Facebook"
+                >
+                  <Facebook className="w-5 h-5" />
+                </a>
+              )}
             </div>
           </div>
 
@@ -76,22 +88,22 @@ const Footer = () => {
               <div className="flex items-center space-x-3">
                 <Phone className="w-5 h-5 text-primary-500" />
                 <div>
-                  <p className="text-white">+52 555-0123</p>
+                  <p className="text-white">{business.phone}</p>
                   <p className="text-gray-400 text-sm">Llamadas y WhatsApp</p>
                 </div>
               </div>
               <div className="flex items-center space-x-3">
                 <Mail className="w-5 h-5 text-primary-500" />
                 <div>
-                  <p className="text-white">info@lahamburguezona.com</p>
+                  <p className="text-white">{business.email}</p>
                   <p className="text-gray-400 text-sm">Email</p>
                 </div>
               </div>
               <div className="flex items-center space-x-3">
                 <MapPin className="w-5 h-5 text-primary-500" />
                 <div>
-                  <p className="text-white">Av. Principal 123</p>
-                  <p className="text-gray-400 text-sm">Ciudad de México</p>
+                  <p className="text-white">{business.address}</p>
+                  <p className="text-gray-400 text-sm">{business.city}</p>
                 </div>
               </div>
             </div>
@@ -100,34 +112,15 @@ const Footer = () => {
           {/* Horarios */}
           <div className="space-y-4">
             <h4 className="text-lg font-semibold">Horarios</h4>
-            <div className="space-y-3">
-              <div className="flex items-center space-x-3">
-                <Clock className="w-5 h-5 text-secondary-500" />
-                <div>
-                  <p className="text-white">Lun - Jue</p>
-                  <p className="text-gray-400 text-sm">11:00 AM - 10:00 PM</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <Clock className="w-5 h-5 text-secondary-500" />
-                <div>
-                  <p className="text-white">Vie - Sáb</p>
-                  <p className="text-gray-400 text-sm">11:00 AM - 11:00 PM</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <Clock className="w-5 h-5 text-secondary-500" />
-                <div>
-                  <p className="text-white">Domingo</p>
-                  <p className="text-gray-400 text-sm">12:00 PM - 9:00 PM</p>
-                </div>
-              </div>
+            <div className="flex items-center space-x-3">
+              <Clock className="w-5 h-5 text-secondary-500" />
+              <p className="text-white">{business.openingHours}</p>
             </div>
-            
+
             <div className="pt-4">
-              <a 
-                href="https://wa.me/525550123" 
-                target="_blank" 
+              <a
+                href={whatsappLink(business)}
+                target="_blank"
                 rel="noopener noreferrer"
                 className="btn-secondary flex items-center justify-center space-x-2 w-full"
               >
@@ -141,7 +134,7 @@ const Footer = () => {
         <div className="border-t border-gray-800 mt-12 pt-8">
           <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
             <p className="text-gray-400 text-sm">
-              © {currentYear} La Hamburguezona. Todos los derechos reservados.
+              © {currentYear} {business.name}. Todos los derechos reservados.
             </p>
             <div className="flex space-x-6 text-sm">
               <Link href="/politicas" className="text-gray-400 hover:text-white transition-colors">

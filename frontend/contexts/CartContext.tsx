@@ -1,12 +1,20 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
 
 // Interfaces
-interface CartItem {
-  id: string;
+export interface CartExtra {
+  id: number;
   name: string;
   price: number;
+}
+
+export interface CartItem {
+  id: string; // clave única de línea: producto + combinación de extras
+  menuItemId: number;
+  name: string;
+  price: number; // precio unitario YA con extras incluidos
   image: string;
   quantity: number;
+  extras?: CartExtra[];
 }
 
 interface CartState {
@@ -14,6 +22,14 @@ interface CartState {
   total: number;
   itemCount: number;
 }
+
+// La misma hamburguesa con distintos extras son líneas distintas del carrito
+export const lineaId = (menuItemId: number | string, extras?: CartExtra[]) => {
+  const base = String(menuItemId);
+  if (!extras || extras.length === 0) return base;
+  const ids = extras.map((e) => e.id).sort((a, b) => a - b).join('.');
+  return `${base}-x${ids}`;
+};
 
 // Tipos de acciones
 type CartAction =
@@ -30,69 +46,49 @@ const initialState: CartState = {
   itemCount: 0,
 };
 
+const conTotales = (items: CartItem[]): CartState => ({
+  items,
+  total: items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+  itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
+});
+
 // Reducer para manejar el estado del carrito
 const cartReducer = (state: CartState, action: CartAction): CartState => {
   switch (action.type) {
     case 'ADD_ITEM': {
       const existingItem = state.items.find(item => item.id === action.payload.id);
-      
+
       if (existingItem) {
-        const updatedItems = state.items.map(item =>
-          item.id === action.payload.id
-            ? { ...item, quantity: item.quantity + action.payload.quantity }
-            : item
+        return conTotales(
+          state.items.map(item =>
+            item.id === action.payload.id
+              ? { ...item, quantity: item.quantity + action.payload.quantity }
+              : item
+          )
         );
-        return {
-          ...state,
-          items: updatedItems,
-          total: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0),
-          itemCount: updatedItems.reduce((sum, item) => sum + item.quantity, 0),
-        };
-      } else {
-        const updatedItems = [...state.items, action.payload];
-        return {
-          ...state,
-          items: updatedItems,
-          total: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0),
-          itemCount: updatedItems.reduce((sum, item) => sum + item.quantity, 0),
-        };
       }
+      return conTotales([...state.items, action.payload]);
     }
 
-    case 'REMOVE_ITEM': {
-      const updatedItems = state.items.filter(item => item.id !== action.payload);
-      return {
-        ...state,
-        items: updatedItems,
-        total: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0),
-        itemCount: updatedItems.reduce((sum, item) => sum + item.quantity, 0),
-      };
-    }
+    case 'REMOVE_ITEM':
+      return conTotales(state.items.filter(item => item.id !== action.payload));
 
-    case 'UPDATE_QUANTITY': {
-      const updatedItems = state.items.map(item =>
-        item.id === action.payload.id
-          ? { ...item, quantity: Math.max(0, action.payload.quantity) }
-          : item
-      ).filter(item => item.quantity > 0);
-
-      return {
-        ...state,
-        items: updatedItems,
-        total: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0),
-        itemCount: updatedItems.reduce((sum, item) => sum + item.quantity, 0),
-      };
-    }
+    case 'UPDATE_QUANTITY':
+      return conTotales(
+        state.items
+          .map(item =>
+            item.id === action.payload.id
+              ? { ...item, quantity: Math.max(0, action.payload.quantity) }
+              : item
+          )
+          .filter(item => item.quantity > 0)
+      );
 
     case 'CLEAR_CART':
       return initialState;
 
     case 'LOAD_CART':
-      return {
-        items: action.payload,
-        total: action.payload.reduce((sum, item) => sum + (item.price * item.quantity), 0),
-        itemCount: action.payload.reduce((sum, item) => sum + item.quantity, 0),
-      };
+      return conTotales(action.payload);
 
     default:
       return state;
@@ -102,7 +98,7 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
 // Context
 interface CartContextType {
   state: CartState;
-  addToCart: (item: Omit<CartItem, 'quantity'>) => void;
+  addToCart: (item: Omit<CartItem, 'quantity' | 'id'> & { id?: string }) => void;
   removeFromCart: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
   clearCart: () => void;
@@ -124,7 +120,12 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     try {
       const savedCart = localStorage.getItem('hamburguezona-cart');
       if (savedCart) {
-        const cartItems = JSON.parse(savedCart);
+        const cartItems = (JSON.parse(savedCart) as CartItem[]).map((item) => ({
+          ...item,
+          // Migración de carritos guardados antes de los extras: el id era el
+          // id del producto directamente
+          menuItemId: item.menuItemId ?? Number(item.id),
+        }));
         dispatch({ type: 'LOAD_CART', payload: cartItems });
       }
     } catch (error) {
@@ -142,30 +143,28 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
   }, [state.items]);
 
   // Funciones del contexto
-  const addToCart = (item: Omit<CartItem, 'quantity'>) => {
-    console.log('Adding to cart:', item);
-    dispatch({ type: 'ADD_ITEM', payload: { ...item, quantity: 1 } });
+  const addToCart: CartContextType['addToCart'] = (item) => {
+    const id = item.id ?? lineaId(item.menuItemId, item.extras);
+    dispatch({ type: 'ADD_ITEM', payload: { ...item, id, quantity: 1 } });
   };
 
   const removeFromCart = (id: string) => {
-    console.log('Removing from cart:', id);
     dispatch({ type: 'REMOVE_ITEM', payload: id });
   };
 
   const updateQuantity = (id: string, quantity: number) => {
-    console.log('Updating quantity:', id, quantity);
     dispatch({ type: 'UPDATE_QUANTITY', payload: { id, quantity } });
   };
 
   const clearCart = () => {
-    console.log('Clearing cart');
     dispatch({ type: 'CLEAR_CART' });
   };
 
-  const getItemQuantity = (id: string): number => {
-    const item = state.items.find(item => item.id === id);
-    return item ? item.quantity : 0;
-  };
+  // Cantidad total del producto en el carrito, sumando todas sus variantes de extras
+  const getItemQuantity = (id: string): number =>
+    state.items
+      .filter(item => item.id === id || String(item.menuItemId) === id)
+      .reduce((sum, item) => sum + item.quantity, 0);
 
   const value: CartContextType = {
     state,
@@ -191,4 +190,3 @@ export const useCart = (): CartContextType => {
   }
   return context;
 };
-

@@ -3,15 +3,22 @@ import Head from 'next/head';
 import { Truck, MapPin, Clock, CheckCircle, AlertCircle, Users, Navigation } from 'lucide-react';
 import AdminLayout from '../../components/Admin/AdminLayout';
 import { withAuth } from '../../middleware/auth';
+import apiService from '../../services/api';
+import type { Order } from '../../services/api';
+
+interface DeliveryStats {
+  ready_orders: number;
+  delivered_today: number;
+  avg_delivery_time: number;
+}
 
 const RepartidorPage = () => {
-  const [orders, setOrders] = useState([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState({
-    readyOrders: 0,
-    inDeliveryOrders: 0,
-    deliveredToday: 0,
-    avgDeliveryTime: 0
+  const [stats, setStats] = useState<DeliveryStats>({
+    ready_orders: 0,
+    delivered_today: 0,
+    avg_delivery_time: 0
   });
 
   useEffect(() => {
@@ -21,18 +28,9 @@ const RepartidorPage = () => {
 
   const fetchOrders = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('/api/orders?status=ready,out_for_delivery&limit=20', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setOrders(data.data || []);
-      }
+      setIsLoading(true);
+      const response = await apiService.getOrders({ estado: 'ready' });
+      setOrders(response.data);
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
@@ -42,57 +40,34 @@ const RepartidorPage = () => {
 
   const fetchStats = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('/api/reports/delivery-stats', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data.data || stats);
-      }
+      const response = await apiService.getReport('entregas');
+      setStats(response.data as DeliveryStats);
     } catch (error) {
       console.error('Error fetching stats:', error);
     }
   };
 
-  const updateOrderStatus = async (orderId, newStatus) => {
+  const updateOrderStatus = async (orderId: Order['id'], newStatus: string) => {
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`/api/orders/${orderId}/status`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      if (response.ok) {
-        fetchOrders(); // Refrescar lista
-        fetchStats(); // Refrescar estadísticas
-      }
+      await apiService.updateOrderStatus(orderId, newStatus);
+      fetchOrders();
+      fetchStats();
     } catch (error) {
       console.error('Error updating order:', error);
     }
   };
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'ready': return 'bg-green-100 text-green-800';
-      case 'out_for_delivery': return 'bg-blue-100 text-blue-800';
       case 'delivered': return 'bg-purple-100 text-purple-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const getStatusText = (status) => {
+  const getStatusText = (status: string) => {
     switch (status) {
       case 'ready': return 'Listo para Entrega';
-      case 'out_for_delivery': return 'En Camino';
       case 'delivered': return 'Entregado';
       default: return status;
     }
@@ -101,28 +76,21 @@ const RepartidorPage = () => {
   const statCards = [
     {
       title: 'Listos para Entrega',
-      value: stats.readyOrders,
+      value: stats.ready_orders,
       icon: Clock,
       color: 'bg-green-500',
       change: 'Esperando repartidor'
     },
     {
-      title: 'En Camino',
-      value: stats.inDeliveryOrders,
-      icon: Truck,
-      color: 'bg-blue-500',
-      change: 'En proceso de entrega'
-    },
-    {
       title: 'Entregados Hoy',
-      value: stats.deliveredToday,
+      value: stats.delivered_today,
       icon: CheckCircle,
       color: 'bg-purple-500',
       change: 'Completados exitosamente'
     },
     {
       title: 'Tiempo Promedio',
-      value: `${stats.avgDeliveryTime} min`,
+      value: `${Math.round(stats.avg_delivery_time)} min`,
       icon: Navigation,
       color: 'bg-orange-500',
       change: 'Tiempo de entrega'
@@ -222,7 +190,7 @@ const RepartidorPage = () => {
                             <MapPin className="w-4 h-4 text-gray-400" />
                             <div>
                               <p className="text-sm font-medium text-gray-900">Dirección</p>
-                              <p className="text-sm text-gray-600">{order.customer_address || 'No especificada'}</p>
+                              <p className="text-sm text-gray-600">{order.delivery_address || 'No especificada'}</p>
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">
@@ -244,7 +212,7 @@ const RepartidorPage = () => {
                                   {item.quantity}x {item.menu_item_name}
                                 </span>
                                 <span className="text-gray-500">
-                                  ${item.price}
+                                  ${item.total_price}
                                 </span>
                               </div>
                             ))}
@@ -255,14 +223,6 @@ const RepartidorPage = () => {
                       {/* Action Buttons */}
                       <div className="flex flex-col space-y-2 ml-6">
                         {order.status === 'ready' && (
-                          <button
-                            onClick={() => updateOrderStatus(order.id, 'out_for_delivery')}
-                            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                          >
-                            Iniciar Entrega
-                          </button>
-                        )}
-                        {order.status === 'out_for_delivery' && (
                           <button
                             onClick={() => updateOrderStatus(order.id, 'delivered')}
                             className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"

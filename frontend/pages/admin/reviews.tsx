@@ -1,93 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import AdminLayout from '../../components/Admin/AdminLayout';
-import { 
-  Star, 
-  Check, 
-  X, 
-  Search, 
+import apiService from '../../services/api';
+import type { Review } from '../../services/api';
+import {
+  Star,
+  Check,
+  X,
+  Search,
   Filter,
   MessageSquare,
   User
 } from 'lucide-react';
 
-interface Review {
-  id: string;
-  customerName: string;
-  rating: number;
-  comment: string;
-  status: 'pending' | 'approved' | 'rejected';
-  createdAt: string;
-  productId: string;
-  productName: string;
-}
-
 const AdminReviews = () => {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [filteredReviews, setFilteredReviews] = useState<Review[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('pending');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     loadReviews();
-  }, []);
+  }, [statusFilter]);
 
   useEffect(() => {
     filterReviews();
-  }, [reviews, searchTerm, statusFilter]);
+  }, [reviews, searchTerm]);
 
   const loadReviews = async () => {
     try {
-      // TODO: Reemplazar con llamada real a la API
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const mockReviews: Review[] = [
-        {
-          id: '1',
-          customerName: 'María González',
-          rating: 5,
-          comment: 'Las mejores hamburguesas de la ciudad. El sabor es increíble y la atención es excelente.',
-          status: 'approved',
-          createdAt: '2025-09-15T10:30:00Z',
-          productId: '1',
-          productName: 'Monstruo Clásico'
-        },
-        {
-          id: '2',
-          customerName: 'Carlos Ruiz',
-          rating: 4,
-          comment: 'Muy buena calidad, pero la entrega tardó un poco más de lo esperado.',
-          status: 'pending',
-          createdAt: '2025-09-16T14:20:00Z',
-          productId: '2',
-          productName: 'Zona BBQ'
-        },
-        {
-          id: '3',
-          customerName: 'Ana Martínez',
-          rating: 5,
-          comment: 'El Monstruo Clásico es mi favorita. Cada bocado es una explosión de sabor.',
-          status: 'approved',
-          createdAt: '2025-09-16T16:45:00Z',
-          productId: '1',
-          productName: 'Monstruo Clásico'
-        },
-        {
-          id: '4',
-          customerName: 'Pedro López',
-          rating: 3,
-          comment: 'La hamburguesa estaba fría cuando llegó. Necesitan mejorar el empaque.',
-          status: 'rejected',
-          createdAt: '2025-09-16T18:30:00Z',
-          productId: '3',
-          productName: 'Brutal Doble'
-        }
-      ];
-
-      setReviews(mockReviews);
+      setIsLoading(true);
+      const response = await apiService.getReviews(statusFilter);
+      setReviews(response.data);
     } catch (error) {
       console.error('Error loading reviews:', error);
+      setReviews([]);
     } finally {
       setIsLoading(false);
     }
@@ -98,38 +46,21 @@ const AdminReviews = () => {
 
     if (searchTerm) {
       filtered = filtered.filter(review =>
-        review.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        review.comment.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        review.productName.toLowerCase().includes(searchTerm.toLowerCase())
+        review.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (review.comment || '').toLowerCase().includes(searchTerm.toLowerCase())
       );
-    }
-
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(review => review.status === statusFilter);
     }
 
     setFilteredReviews(filtered);
   };
 
-  const updateReviewStatus = async (reviewId: string, newStatus: Review['status']) => {
+  const updateReviewStatus = async (reviewId: Review['id'], newStatus: 'approved' | 'rejected') => {
     try {
-      // TODO: Implementar actualización real
-      setReviews(reviews.map(review =>
-        review.id === reviewId ? { ...review, status: newStatus } : review
-      ));
+      await apiService.moderateReview(reviewId, newStatus);
+      setReviews(reviews.filter(review => review.id !== reviewId));
     } catch (error) {
       console.error('Error updating review status:', error);
-    }
-  };
-
-  const deleteReview = async (reviewId: string) => {
-    if (confirm('¿Estás seguro de que quieres eliminar esta reseña?')) {
-      try {
-        // TODO: Implementar eliminación real
-        setReviews(reviews.filter(review => review.id !== reviewId));
-      } catch (error) {
-        console.error('Error deleting review:', error);
-      }
+      alert('Error al actualizar la reseña');
     }
   };
 
@@ -216,7 +147,6 @@ const AdminReviews = () => {
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
-                <option value="all">Todos los estados</option>
                 <option value="pending">Pendientes</option>
                 <option value="approved">Aprobadas</option>
                 <option value="rejected">Rechazadas</option>
@@ -236,7 +166,7 @@ const AdminReviews = () => {
                       <User className="w-5 h-5 text-gray-600" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-900">{review.customerName}</h3>
+                      <h3 className="font-semibold text-gray-900">{review.customer_name}</h3>
                       <div className="flex items-center space-x-2">
                         <div className="flex items-center space-x-1">
                           {renderStars(review.rating)}
@@ -248,14 +178,11 @@ const AdminReviews = () => {
 
                   <div className="mb-4">
                     <p className="text-gray-700 leading-relaxed">{review.comment}</p>
-                    <p className="text-sm text-gray-500 mt-2">
-                      Producto: <span className="font-medium">{review.productName}</span>
-                    </p>
                   </div>
 
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-gray-500">
-                      {formatDate(review.createdAt)}
+                      {formatDate(review.created_at)}
                     </span>
                     <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusColor(review.status)}`}>
                       {getStatusText(review.status)}
@@ -282,13 +209,6 @@ const AdminReviews = () => {
                       </button>
                     </>
                   )}
-                  <button
-                    onClick={() => deleteReview(review.id)}
-                    className="p-2 text-gray-400 hover:bg-gray-50 rounded-lg transition-colors"
-                    title="Eliminar reseña"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
                 </div>
               </div>
             </div>

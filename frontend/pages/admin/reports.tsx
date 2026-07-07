@@ -1,19 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
+import * as XLSX from 'xlsx';
 import AdminLayout from '../../components/Admin/AdminLayout';
-// Removed apiGet import - using fetch directly like orders page
-import { 
-  BarChart3, 
-  TrendingUp, 
-  Users, 
-  ShoppingCart, 
-  DollarSign, 
+import apiService from '../../services/api';
+import type { InsumosReport } from '../../services/api';
+import {
+  BarChart3,
+  TrendingUp,
+  TrendingDown,
+  Users,
+  ShoppingCart,
+  DollarSign,
   Package,
   Star,
   Calendar,
   Download,
   Filter,
-  RefreshCw
+  RefreshCw,
+  Boxes,
+  Trash2
 } from 'lucide-react';
 
 interface DashboardStats {
@@ -45,22 +50,33 @@ interface DashboardStats {
     avg_rating: number;
     positive_reviews: number;
   };
-  salesByCategory: Array<{
+  sales_by_category: Array<{
     category: string;
     items_sold: number;
     revenue: number;
   }>;
-  weeklySales: Array<{
+  weekly_sales: Array<{
     date: string;
     orders_count: number;
     revenue: number;
   }>;
-  topProducts: Array<{
+  top_products: Array<{
     name: string;
     category: string;
     total_sold: number;
     revenue: number;
   }>;
+  comparativa: {
+    ventas_semana_actual: number;
+    ventas_semana_anterior: number;
+    pedidos_semana_actual: number;
+    pedidos_semana_anterior: number;
+    ventas_mes_actual: number;
+    ventas_mes_anterior: number;
+    cambio_ventas_semana_pct: number | null;
+    cambio_pedidos_semana_pct: number | null;
+    cambio_ventas_mes_pct: number | null;
+  };
 }
 
 const ReportsPage = () => {
@@ -80,6 +96,9 @@ const ReportsPage = () => {
     loadDashboardData();
   }, []);
 
+  const [insumosData, setInsumosData] = useState<InsumosReport | null>(null);
+  const [insumosDias, setInsumosDias] = useState(30);
+
   useEffect(() => {
     if (activeTab === 'sales') {
       loadSalesData();
@@ -87,31 +106,85 @@ const ReportsPage = () => {
       loadCustomersData();
     } else if (activeTab === 'products') {
       loadProductsData();
+    } else if (activeTab === 'insumos') {
+      loadInsumosData(insumosDias);
     }
-  }, [activeTab]);
+  }, [activeTab, insumosDias]);
+
+  const loadInsumosData = async (dias: number) => {
+    try {
+      const response = await apiService.getInsumosReport(dias);
+      setInsumosData(response.data);
+    } catch (error) {
+      console.error('Error loading insumos data:', error);
+    }
+  };
+
+  // ── Exportación ─────────────────────────────────────────
+
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
+  const datosDeTabActiva = (): { nombre: string; data: any } | null => {
+    switch (activeTab) {
+      case 'dashboard': return dashboardData ? { nombre: 'dashboard', data: dashboardData } : null;
+      case 'sales': return salesData ? { nombre: 'ventas', data: salesData } : null;
+      case 'customers': return customersData ? { nombre: 'clientes', data: customersData } : null;
+      case 'products': return productsData ? { nombre: 'productos', data: productsData } : null;
+      case 'insumos': return insumosData ? { nombre: `insumos-${insumosDias}dias`, data: insumosData } : null;
+      default: return null;
+    }
+  };
+
+  // Convierte el objeto del reporte en hojas: cada array de objetos es una hoja,
+  // cada sub-objeto es una hoja de una fila, y los valores sueltos van a "Resumen".
+  const exportarExcel = () => {
+    const activo = datosDeTabActiva();
+    if (!activo) {
+      alert('Espera a que carguen los datos del reporte');
+      return;
+    }
+    const wb = XLSX.utils.book_new();
+    const usados = new Set<string>();
+    const agregarHoja = (nombre: string, filas: any[]) => {
+      if (!filas || filas.length === 0) return;
+      let hoja = nombre.replace(/_/g, ' ').slice(0, 31);
+      while (usados.has(hoja)) hoja = `${hoja.slice(0, 28)}_2`;
+      usados.add(hoja);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), hoja);
+    };
+
+    const sueltos: Record<string, any> = {};
+    Object.entries(activo.data as Record<string, any>).forEach(([clave, valor]) => {
+      if (Array.isArray(valor) && valor.length > 0 && typeof valor[0] === 'object') {
+        agregarHoja(clave, valor);
+      } else if (valor && typeof valor === 'object') {
+        agregarHoja(clave, [valor]);
+      } else {
+        sueltos[clave] = valor;
+      }
+    });
+    if (Object.keys(sueltos).length > 0) agregarHoja('Resumen', [sueltos]);
+
+    if (usados.size === 0) {
+      alert('Este reporte no tiene datos para exportar');
+      return;
+    }
+    const fecha = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `hamburguezona-${activo.nombre}-${fecha}.xlsx`);
+    setShowExportMenu(false);
+  };
+
+  const exportarPDF = () => {
+    // Vista imprimible del tab activo: el diálogo del navegador permite "Guardar como PDF"
+    setShowExportMenu(false);
+    setTimeout(() => window.print(), 100);
+  };
 
   const loadDashboardData = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/reports/dashboard', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        setDashboardData(data.data);
-        console.log('Dashboard data loaded: success');
-      } else {
-        console.error('Error loading dashboard data:', data.error);
-      }
+      const response = await apiService.getReport('dashboard');
+      setDashboardData(response.data as DashboardStats);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
@@ -121,22 +194,8 @@ const ReportsPage = () => {
 
   const loadSalesData = async () => {
     try {
-      const response = await fetch('/api/reports/sales', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        setSalesData(data.data);
-        console.log('Sales data loaded: success');
-      }
+      const response = await apiService.getReport('ventas');
+      setSalesData(response.data);
     } catch (error) {
       console.error('Error loading sales data:', error);
     }
@@ -144,22 +203,8 @@ const ReportsPage = () => {
 
   const loadCustomersData = async () => {
     try {
-      const response = await fetch('/api/reports/customers', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        setCustomersData(data.data);
-        console.log('Customers data loaded: success');
-      }
+      const response = await apiService.getReport('clientes');
+      setCustomersData(response.data);
     } catch (error) {
       console.error('Error loading customers data:', error);
     }
@@ -167,48 +212,10 @@ const ReportsPage = () => {
 
   const loadProductsData = async () => {
     try {
-      const response = await fetch('/api/reports/products', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        setProductsData(data.data);
-        console.log('Products data loaded: success');
-      }
+      const response = await apiService.getReport('productos');
+      setProductsData(response.data);
     } catch (error) {
       console.error('Error loading products data:', error);
-    }
-  };
-
-  const handleMarkOrdersDelivered = async () => {
-    try {
-      const response = await fetch('/api/orders/test/mark-delivered', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
-        }
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        alert(`✅ ${result.message}`);
-        // Recargar datos del dashboard
-        loadDashboardData();
-      } else {
-        alert(`❌ Error: ${result.error}`);
-      }
-    } catch (error) {
-      console.error('Error marking orders as delivered:', error);
-      alert('❌ Error al marcar pedidos como entregados');
     }
   };
 
@@ -250,6 +257,36 @@ const ReportsPage = () => {
     </div>
   );
 
+  const ComparisonCard = ({ title, current, previous, changePct, formatValue }: {
+    title: string;
+    current: number;
+    previous: number;
+    changePct: number | null;
+    formatValue: (v: number) => string;
+  }) => {
+    const isUp = (changePct ?? 0) >= 0;
+    const noPreviousData = previous === 0 && current === 0;
+    return (
+      <div className="border border-gray-100 rounded-lg p-4">
+        <p className="text-sm font-medium text-gray-600 mb-2">{title}</p>
+        <div className="flex items-end justify-between">
+          <p className="text-2xl font-bold text-gray-900">{formatValue(current)}</p>
+          {!noPreviousData && changePct !== null && (
+            <div className={`flex items-center gap-1 text-sm font-semibold ${isUp ? 'text-green-600' : 'text-red-600'}`}>
+              {isUp ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+              {Math.abs(changePct)}%
+            </div>
+          )}
+        </div>
+        <p className="text-xs text-gray-500 mt-1">
+          {noPreviousData
+            ? 'Sin datos del período anterior'
+            : `Período anterior: ${formatValue(previous)}`}
+        </p>
+      </div>
+    );
+  };
+
   if (isLoading) {
     return (
       <AdminLayout>
@@ -279,16 +316,7 @@ const ReportsPage = () => {
             <h1 className="text-3xl font-bold text-gray-900">Reportes y Análisis</h1>
             <p className="text-gray-600 mt-2">Estadísticas y métricas de tu negocio</p>
           </div>
-          <div className="flex space-x-3">
-            {/* Botón de prueba oculto - cambiar 'hidden' por 'block' si necesitas generar datos de prueba */}
-            <button
-              onClick={handleMarkOrdersDelivered}
-              className="hidden bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
-              title="Botón de prueba - oculto por defecto"
-            >
-              <span>📦</span>
-              <span>Marcar Entregados (Test)</span>
-            </button>
+          <div className="flex space-x-3 print:hidden">
             <button
               onClick={loadDashboardData}
               className="btn-outline flex items-center space-x-2"
@@ -296,21 +324,49 @@ const ReportsPage = () => {
               <RefreshCw className="w-4 h-4" />
               <span>Actualizar</span>
             </button>
-            <button className="btn-primary flex items-center space-x-2">
-              <Download className="w-4 h-4" />
-              <span>Exportar</span>
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowExportMenu((v) => !v)}
+                className="btn-primary flex items-center space-x-2"
+              >
+                <Download className="w-4 h-4" />
+                <span>Exportar</span>
+              </button>
+              {showExportMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-100 z-20 overflow-hidden">
+                  <button
+                    onClick={exportarExcel}
+                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Excel (.xlsx)
+                  </button>
+                  <button
+                    onClick={exportarPDF}
+                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    PDF (imprimir / guardar)
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
+        {/* Encabezado solo para impresión / PDF */}
+        <div className="hidden print:block border-b border-gray-300 pb-3">
+          <p className="text-lg font-bold">La Hamburguezona — Reporte de {activeTab === 'sales' ? 'ventas' : activeTab === 'customers' ? 'clientes' : activeTab === 'products' ? 'productos' : activeTab === 'insumos' ? 'insumos' : 'dashboard'}</p>
+          <p className="text-sm text-gray-600">Generado el {new Date().toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' })}</p>
+        </div>
+
         {/* Tabs */}
-        <div className="border-b border-gray-200">
+        <div className="border-b border-gray-200 print:hidden">
           <nav className="-mb-px flex space-x-8">
             {[
               { id: 'dashboard', name: 'Dashboard', icon: BarChart3 },
               { id: 'sales', name: 'Ventas', icon: DollarSign },
               { id: 'customers', name: 'Clientes', icon: Users },
-              { id: 'products', name: 'Productos', icon: Package }
+              { id: 'products', name: 'Productos', icon: Package },
+              { id: 'insumos', name: 'Insumos', icon: Boxes }
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -395,6 +451,38 @@ const ReportsPage = () => {
               />
             </div>
 
+            {/* Comparativa histórica */}
+            {dashboardData.comparativa && (
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  Comparativa con el Período Anterior
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <ComparisonCard
+                    title="Ventas — Últimos 7 días"
+                    current={dashboardData.comparativa.ventas_semana_actual}
+                    previous={dashboardData.comparativa.ventas_semana_anterior}
+                    changePct={dashboardData.comparativa.cambio_ventas_semana_pct}
+                    formatValue={formatCurrency}
+                  />
+                  <ComparisonCard
+                    title="Pedidos — Últimos 7 días"
+                    current={dashboardData.comparativa.pedidos_semana_actual}
+                    previous={dashboardData.comparativa.pedidos_semana_anterior}
+                    changePct={dashboardData.comparativa.cambio_pedidos_semana_pct}
+                    formatValue={(v) => String(v)}
+                  />
+                  <ComparisonCard
+                    title="Ventas — Últimos 30 días"
+                    current={dashboardData.comparativa.ventas_mes_actual}
+                    previous={dashboardData.comparativa.ventas_mes_anterior}
+                    changePct={dashboardData.comparativa.cambio_ventas_mes_pct}
+                    formatValue={formatCurrency}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Sales by Category */}
@@ -403,7 +491,7 @@ const ReportsPage = () => {
                   Ventas por Categoría
                 </h3>
                 <div className="space-y-3">
-                  {dashboardData.salesByCategory.slice(0, 5).map((category, index) => (
+                  {dashboardData.sales_by_category.slice(0, 5).map((category, index) => (
                     <div key={category.category} className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
                         <div className={`w-3 h-3 rounded-full ${
@@ -432,7 +520,7 @@ const ReportsPage = () => {
                   Productos Más Vendidos
                 </h3>
                 <div className="space-y-3">
-                  {dashboardData.topProducts.slice(0, 5).map((product, index) => (
+                  {dashboardData.top_products.slice(0, 5).map((product, index) => (
                     <div key={product.name} className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
                         <span className="flex items-center justify-center w-6 h-6 bg-primary-100 text-primary-800 text-xs font-bold rounded-full">
@@ -463,13 +551,13 @@ const ReportsPage = () => {
                 Ventas de la Última Semana
               </h3>
               <div className="grid grid-cols-7 gap-4">
-                {dashboardData.weeklySales.map((day, index) => (
+                {dashboardData.weekly_sales.map((day, index) => (
                   <div key={day.date} className="text-center">
                     <div className="bg-gray-100 rounded-lg p-3 mb-2">
                       <div 
                         className="bg-primary-500 rounded"
                         style={{ 
-                          height: `${Math.max(20, (day.revenue / Math.max(...dashboardData.weeklySales.map(d => d.revenue), 1)) * 100)}px` 
+                          height: `${Math.max(20, (day.revenue / Math.max(...dashboardData.weekly_sales.map(d => d.revenue), 1)) * 100)}px` 
                         }}
                       ></div>
                     </div>
@@ -498,31 +586,31 @@ const ReportsPage = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <StatCard
                     title="Total Ventas"
-                    value={formatCurrency(salesData.performanceMetrics.total_revenue)}
+                    value={formatCurrency(salesData.performance.total_revenue)}
                     icon={DollarSign}
                     color="bg-green-500"
-                    subtitle={`${salesData.performanceMetrics.total_orders} pedidos`}
+                    subtitle={`${salesData.performance.total_orders} pedidos`}
                   />
                   <StatCard
                     title="Valor Promedio"
-                    value={formatCurrency(salesData.performanceMetrics.avg_order_value)}
+                    value={formatCurrency(salesData.performance.avg_order_value)}
                     icon={TrendingUp}
                     color="bg-blue-500"
                     subtitle="Por pedido"
                   />
                   <StatCard
                     title="Tasa de Éxito"
-                    value={`${formatNumber(salesData.performanceMetrics.success_rate, 1)}%`}
+                    value={`${formatNumber(salesData.performance.success_rate, 1)}%`}
                     icon={BarChart3}
                     color="bg-purple-500"
-                    subtitle={`${salesData.performanceMetrics.successful_orders} exitosos`}
+                    subtitle={`${salesData.performance.successful_orders} exitosos`}
                   />
                   <StatCard
                     title="Pedidos Cancelados"
-                    value={salesData.performanceMetrics.cancelled_orders}
+                    value={salesData.performance.cancelled_orders}
                     icon={ShoppingCart}
                     color="bg-red-500"
-                    subtitle={`${salesData.performanceMetrics.success_rate}% éxito`}
+                    subtitle={`${salesData.performance.success_rate}% éxito`}
                   />
                 </div>
 
@@ -532,7 +620,7 @@ const ReportsPage = () => {
                     Ventas por Categoría
                   </h3>
                   <div className="space-y-3">
-                    {salesData.salesByCategory.map((category: any, index: number) => (
+                    {salesData.sales_by_category.map((category: any, index: number) => (
                       <div key={category.category} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div className="flex items-center space-x-3">
                           <div className={`w-3 h-3 rounded-full ${
@@ -609,7 +697,7 @@ const ReportsPage = () => {
                     Clientes Más Activos
                   </h3>
                   <div className="space-y-3">
-                    {customersData.topCustomers.slice(0, 10).map((customer: any, index: number) => (
+                    {customersData.top_customers.slice(0, 10).map((customer: any, index: number) => (
                       <div key={customer.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div className="flex items-center space-x-3">
                           <span className="flex items-center justify-center w-8 h-8 bg-primary-100 text-primary-800 text-sm font-bold rounded-full">
@@ -675,7 +763,7 @@ const ReportsPage = () => {
                     Productos Más Vendidos
                   </h3>
                   <div className="space-y-3">
-                    {productsData.topSellingProducts.slice(0, 10).map((product: any, index: number) => (
+                    {productsData.top_selling_products.slice(0, 10).map((product: any, index: number) => (
                       <div key={product.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div className="flex items-center space-x-3">
                           <span className="flex items-center justify-center w-8 h-8 bg-primary-100 text-primary-800 text-sm font-bold rounded-full">
@@ -705,7 +793,7 @@ const ReportsPage = () => {
                     Rendimiento por Categoría
                   </h3>
                   <div className="space-y-3">
-                    {productsData.categoryPerformance.map((category: any, index: number) => (
+                    {productsData.category_performance.map((category: any, index: number) => (
                       <div key={category.category} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div className="flex items-center space-x-3">
                           <div className={`w-3 h-3 rounded-full ${
@@ -732,13 +820,13 @@ const ReportsPage = () => {
                 </div>
 
                 {/* Products with No Sales */}
-                {productsData.productsNoSales.length > 0 && (
+                {productsData.products_no_sales.length > 0 && (
                   <div className="bg-white rounded-lg shadow-md p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">
                       Productos Sin Ventas
                     </h3>
                     <div className="space-y-2">
-                      {productsData.productsNoSales.map((product: any) => (
+                      {productsData.products_no_sales.map((product: any) => (
                         <div key={product.id} className="flex items-center justify-between p-2 bg-red-50 rounded-lg">
                           <div>
                             <p className="text-sm font-medium text-gray-900">{product.name}</p>
@@ -758,6 +846,108 @@ const ReportsPage = () => {
                 <div className="text-center">
                   <RefreshCw className="w-8 h-8 text-gray-400 animate-spin mx-auto mb-4" />
                   <p className="text-gray-600">Cargando datos de productos...</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Insumos Tab */}
+        {activeTab === 'insumos' && (
+          <div className="space-y-6">
+            {/* Selector de período */}
+            <div className="flex items-center gap-2 print:hidden">
+              {[7, 30, 90].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setInsumosDias(d)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
+                    insumosDias === d
+                      ? 'bg-primary-500 text-white border-primary-500'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-primary-300'
+                  }`}
+                >
+                  Últimos {d} días
+                </button>
+              ))}
+            </div>
+
+            {insumosData ? (
+              <>
+                {/* Totales */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-white rounded-lg shadow-md p-5">
+                    <p className="text-sm text-gray-500">Consumo (cocina)</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(insumosData.totales.consumo_valor)}</p>
+                  </div>
+                  <div className="bg-white rounded-lg shadow-md p-5">
+                    <div className="flex items-center gap-1.5">
+                      <Trash2 className="w-4 h-4 text-red-500" />
+                      <p className="text-sm text-gray-500">Merma (desperdicio)</p>
+                    </div>
+                    <p className="text-2xl font-bold text-red-600">{formatCurrency(insumosData.totales.merma_valor)}</p>
+                    <p className="text-xs text-gray-500 mt-1">{insumosData.totales.merma_pct}% de lo que salió</p>
+                  </div>
+                  <div className="bg-white rounded-lg shadow-md p-5">
+                    <p className="text-sm text-gray-500">Compras del período</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(insumosData.totales.compras_valor)}</p>
+                  </div>
+                  <div className="bg-white rounded-lg shadow-md p-5">
+                    <p className="text-sm text-gray-500">Inventario actual</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(insumosData.totales.inventario_actual_valor)}</p>
+                  </div>
+                </div>
+
+                {/* Detalle por insumo */}
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    Movimiento por Insumo — últimos {insumosData.dias} días
+                  </h3>
+                  {insumosData.por_insumo.length === 0 ? (
+                    <p className="text-center text-gray-500 py-6">
+                      Sin movimientos de insumos en el período.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-gray-500 border-b border-gray-100">
+                            <th className="px-3 py-2 font-medium">Insumo</th>
+                            <th className="px-3 py-2 font-medium text-right">Consumo</th>
+                            <th className="px-3 py-2 font-medium text-right">Merma</th>
+                            <th className="px-3 py-2 font-medium text-right">Entradas</th>
+                            <th className="px-3 py-2 font-medium text-right">Consumo $</th>
+                            <th className="px-3 py-2 font-medium text-right">Merma $</th>
+                            <th className="px-3 py-2 font-medium text-right">Compras $</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {insumosData.por_insumo.map((r) => (
+                            <tr key={r.id} className="border-b border-gray-50">
+                              <td className="px-3 py-2 font-medium text-gray-900">{r.name}</td>
+                              <td className="px-3 py-2 text-right">{parseFloat(r.consumo)} {r.unit}</td>
+                              <td className={`px-3 py-2 text-right ${parseFloat(r.merma) > 0 ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                                {parseFloat(r.merma)} {r.unit}
+                              </td>
+                              <td className="px-3 py-2 text-right text-gray-500">{parseFloat(r.entradas)} {r.unit}</td>
+                              <td className="px-3 py-2 text-right">{formatCurrency(r.consumo_valor)}</td>
+                              <td className={`px-3 py-2 text-right ${parseFloat(r.merma_valor) > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                                {formatCurrency(r.merma_valor)}
+                              </td>
+                              <td className="px-3 py-2 text-right">{formatCurrency(r.compras_valor)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <div className="text-center">
+                  <RefreshCw className="w-8 h-8 text-gray-400 animate-spin mx-auto mb-4" />
+                  <p className="text-gray-600">Cargando datos de insumos...</p>
                 </div>
               </div>
             )}

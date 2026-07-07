@@ -7,7 +7,7 @@ import { Camera, Heart, Share2, Filter } from 'lucide-react';
 const galleryImages = [
   {
     id: 1,
-    src: '/images/gallery/burger-1.jpg',
+    src: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&q=80&auto=format&fit=crop',
     alt: 'Monstruo Clásico',
     title: 'Monstruo Clásico',
     category: 'hamburguesas',
@@ -16,7 +16,7 @@ const galleryImages = [
   },
   {
     id: 2,
-    src: '/images/gallery/burger-2.jpg',
+    src: 'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=800&q=80&auto=format&fit=crop',
     alt: 'Zona BBQ',
     title: 'Zona BBQ',
     category: 'hamburguesas',
@@ -25,16 +25,16 @@ const galleryImages = [
   },
   {
     id: 3,
-    src: '/images/gallery/burger-3.jpg',
-    alt: 'Brutal Doble',
-    title: 'Brutal Doble',
+    src: 'https://images.unsplash.com/photo-1520072959219-c595dc870360?w=800&q=80&auto=format&fit=crop',
+    alt: 'Combo Brutal',
+    title: 'Combo Brutal',
     category: 'hamburguesas',
     likes: 156,
     description: 'Para los más hambrientos, doble sabor'
   },
   {
     id: 4,
-    src: '/images/gallery/restaurant-1.jpg',
+    src: 'https://images.unsplash.com/photo-1550317138-10000687a72b?w=800&q=80&auto=format&fit=crop',
     alt: 'Interior del restaurante',
     title: 'Nuestro Local',
     category: 'restaurante',
@@ -43,7 +43,7 @@ const galleryImages = [
   },
   {
     id: 5,
-    src: '/images/gallery/restaurant-2.jpg',
+    src: 'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=800&q=80&auto=format&fit=crop',
     alt: 'Cocina abierta',
     title: 'Cocina Abierta',
     category: 'restaurante',
@@ -52,16 +52,16 @@ const galleryImages = [
   },
   {
     id: 6,
-    src: '/images/gallery/team-1.jpg',
-    alt: 'Nuestro equipo',
-    title: 'Nuestro Equipo',
+    src: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80&auto=format&fit=crop',
+    alt: 'Ambiente del restaurante',
+    title: 'Nuestro Ambiente',
     category: 'equipo',
     likes: 203,
-    description: 'El mejor equipo de La Hamburguezona'
+    description: 'Un espacio pensado para disfrutar en familia o con amigos'
   },
   {
     id: 7,
-    src: '/images/gallery/extras-1.jpg',
+    src: 'https://images.unsplash.com/photo-1561758033-d89a9ad46330?w=800&q=80&auto=format&fit=crop',
     alt: 'Papas fritas',
     title: 'Papas Deluxe',
     category: 'extras',
@@ -70,7 +70,7 @@ const galleryImages = [
   },
   {
     id: 8,
-    src: '/images/gallery/drinks-1.jpg',
+    src: 'https://images.unsplash.com/photo-1546171753-97d7676e4602?w=800&q=80&auto=format&fit=crop',
     alt: 'Malteadas',
     title: 'Malteadas Premium',
     category: 'bebidas',
@@ -79,7 +79,7 @@ const galleryImages = [
   },
   {
     id: 9,
-    src: '/images/gallery/burger-4.jpg',
+    src: 'https://images.unsplash.com/photo-1607013251379-e6eecfffe234?w=800&q=80&auto=format&fit=crop',
     alt: 'Zona Picante',
     title: 'Zona Picante',
     category: 'hamburguesas',

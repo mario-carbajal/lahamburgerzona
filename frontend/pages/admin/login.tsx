@@ -3,7 +3,8 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { Eye, EyeOff, User, Lock, ChefHat, Truck, CreditCard, Shield } from 'lucide-react';
-import { createSession } from '../../utils/globalSessionManager';
+import { createSession } from '../../utils/session';
+import apiService from '../../services/api';
 
 const LoginPage = () => {
   const router = useRouter();
@@ -63,48 +64,33 @@ const LoginPage = () => {
     setError('');
 
     try {
-      const response = await fetch('/api/admin-users/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
+      const response = await apiService.login(formData.username, formData.password);
 
-      const data = await response.json();
+      setSuccess('Inicio de sesión exitoso');
+      createSession(response.data.token, response.data.usuario);
 
-      if (data.success) {
-        setSuccess('Inicio de sesión exitoso');
-        
-        // Crear sesión usando el SessionManager simple
-        createSession(data.data.token, data.data.user);
-        
-        // Redirigir según el rol
-        const userRole = data.data.user.role;
-        setTimeout(() => {
-          switch (userRole) {
-            case 'ADMIN':
-              router.push('/admin');
-              break;
-            case 'COCINA':
-              router.push('/admin/cocina');
-              break;
-            case 'REPARTIDOR':
-              router.push('/admin/repartidor');
-              break;
-            case 'CAJA':
-              router.push('/admin/caja');
-              break;
-            default:
-              router.push('/admin');
-          }
-        }, 1000);
-      } else {
-        setError(data.message || 'Error al iniciar sesión');
-      }
+      const userRole = response.data.usuario.role;
+      setTimeout(() => {
+        switch (userRole) {
+          case 'ADMIN':
+            router.push('/admin');
+            break;
+          case 'COCINA':
+            router.push('/admin/cocina');
+            break;
+          case 'REPARTIDOR':
+            router.push('/admin/repartidor');
+            break;
+          case 'CAJA':
+            router.push('/admin/caja');
+            break;
+          default:
+            router.push('/admin');
+        }
+      }, 1000);
     } catch (error) {
       console.error('Error en login:', error);
-      setError('Error de conexión. Intenta de nuevo.');
+      setError(error instanceof Error ? error.message : 'Error de conexión. Intenta de nuevo.');
     } finally {
       setIsLoading(false);
     }
@@ -273,8 +259,7 @@ const LoginPage = () => {
                   Contacta al administrador principal para obtener credenciales de acceso al sistema.
                 </p>
                 <div className="text-sm text-blue-700">
-                  <p><strong>Email:</strong> admin@lahamburguezona.com</p>
-                  <p><strong>Teléfono:</strong> +52 555-0123</p>
+                  <p><strong>Email:</strong> contacto@hamburguezona.com</p>
                 </div>
               </div>
             </div>

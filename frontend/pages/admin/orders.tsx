@@ -1,164 +1,131 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
+import toast from 'react-hot-toast';
 import AdminLayout from '../../components/Admin/AdminLayout';
+import EditOrderModal from '../../components/Admin/EditOrderModal';
+import { withAuth } from '../../middleware/auth';
 import apiService from '../../services/api';
-import { 
-  Search, 
-  Filter, 
-  Eye, 
-  Check, 
-  X, 
+import type { Order } from '../../services/api';
+import { playNewOrderSound } from '../../utils/orderAlerts';
+import {
+  Search,
+  Filter,
+  Eye,
+  Check,
+  X,
   Clock,
   Truck,
   CheckCircle,
   AlertCircle
 } from 'lucide-react';
 
-interface Order {
-  id: number;
-  orderNumber: string;
-  customerName: string;
-  customerPhone: string;
-  customerEmail?: string;
-  deliveryAddress: string;
-  deliveryInstructions?: string;
-  paymentMethod: string;
-  paymentStatus: string;
-  subtotal: number;
-  deliveryFee: number;
-  tax: number;
-  totalAmount: number;
-  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
-  notes?: string;
-  statusNotes?: string;
-  itemCount: number;
-  itemsSummary: string;
-  items: Array<{
-    id: number;
-    menu_item_id?: number;
-    menu_item_name?: string;
-    quantity: number;
-    unit_price?: number;
-    total_price?: number;
-    price?: number;
-    unitPrice?: number;
-    totalPrice?: number;
-    special_instructions?: string;
-  }>;
-  createdAt: string;
-  updatedAt: string;
-}
+const PAGE_SIZE = 20;
 
 const AdminOrders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
-  const [cancellingOrder, setCancellingOrder] = useState<number | null>(null);
+  const [cancellingOrder, setCancellingOrder] = useState<Order['id'] | null>(null);
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
   const [confirmingOrder, setConfirmingOrder] = useState<Order | null>(null);
-  const [showCreateCustomerModal, setShowCreateCustomerModal] = useState(false);
-  const [customerForm, setCustomerForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    address: ''
-  });
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // IDs de pedidos ya vistos; null hasta la primera carga para no sonar al entrar
+  const seenOrderIdsRef = useRef<Set<string> | null>(null);
+
+  // Debounce de la búsqueda (400ms) para no pegarle al API en cada tecla
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   useEffect(() => {
+    // Al cambiar de página o filtros, re-establecer la línea base de pedidos
+    // vistos para no disparar alertas falsas con pedidos viejos.
+    seenOrderIdsRef.current = null;
     loadOrders();
-  }, []);
 
-  useEffect(() => {
-    filterOrders();
-  }, [orders, searchTerm, statusFilter]);
+    // Buscar pedidos nuevos cada 30 segundos
+    const interval = setInterval(() => loadOrders(true), 30000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, statusFilter, debouncedSearch]);
 
-  const loadOrders = async () => {
+  const loadOrders = async (silent = false) => {
     try {
-      const response = await fetch('/api/orders-simple');
-      
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      
-      if (data.success && data.data) {
-        setOrders(data.data);
-      } else {
-        console.error('Error en respuesta de API:', data);
-        setOrders([]);
-      }
-    } catch (error) {
-      console.error('Error loading orders:', error);
-      // En caso de error, mostrar mensaje pero no bloquear la UI
-      setOrders([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const filterOrders = () => {
-    let filtered = orders;
-
-    if (searchTerm) {
-      filtered = filtered.filter(order =>
-        order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.customerPhone.includes(searchTerm)
-      );
-    }
-
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(order => order.status === statusFilter);
-    }
-
-    setFilteredOrders(filtered);
-  };
-
-  const updateOrderStatus = async (orderId: number, newStatus: Order['status']) => {
-    try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`/api/orders/${orderId}/status`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status: newStatus }),
+      if (!silent) setIsLoading(true);
+      const response = await apiService.getOrders({
+        page,
+        page_size: PAGE_SIZE,
+        estado: statusFilter !== 'all' ? statusFilter : undefined,
+        busqueda: debouncedSearch || undefined,
       });
 
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      
-      if (data.success) {
-        // Actualizar el estado local
-        setOrders(orders.map(order =>
-          order.id === orderId ? { ...order, status: newStatus } : order
-        ));
-        
-        // Si es confirmar pedido, mostrar modal de WhatsApp
-        if (newStatus === 'confirmed') {
-          const orderToConfirm = orders.find(order => order.id === orderId);
-          if (orderToConfirm) {
-            setConfirmingOrder(orderToConfirm);
-            setShowWhatsAppModal(true);
+      // Detección de pedidos nuevos: solo en la página 1 sin filtros, donde
+      // siempre aparecen primero (orden descendente por fecha).
+      const esVistaPrincipal = page === 1 && statusFilter === 'all' && !debouncedSearch;
+      const previous = seenOrderIdsRef.current;
+      if (esVistaPrincipal && previous !== null) {
+        const nuevos = response.data.filter(o => !previous.has(String(o.id)));
+        if (nuevos.length > 0) {
+          playNewOrderSound();
+          for (const pedido of nuevos) {
+            toast.success(`Nuevo pedido ${pedido.order_number} de ${pedido.customer_name}`, {
+              icon: '🔔',
+              duration: 8000,
+            });
           }
+        }
+      }
+      seenOrderIdsRef.current = new Set(response.data.map(o => String(o.id)));
+
+      setOrders(response.data);
+      setTotal(response.total ?? response.data.length);
+    } catch (error) {
+      console.error('Error loading orders:', error);
+      if (!silent) {
+        setOrders([]);
+        setTotal(0);
+      }
+    } finally {
+      if (!silent) setIsLoading(false);
+    }
+  };
+
+  const updateOrderStatus = async (orderId: Order['id'], newStatus: Order['status']) => {
+    try {
+      await apiService.updateOrderStatus(orderId, newStatus);
+
+      setOrders(orders.map(order =>
+        order.id === orderId ? { ...order, status: newStatus } : order
+      ));
+
+      if (newStatus === 'confirmed') {
+        const orderToConfirm = orders.find(order => order.id === orderId);
+        if (orderToConfirm) {
+          setConfirmingOrder(orderToConfirm);
+          setShowWhatsAppModal(true);
         }
       }
     } catch (error) {
       console.error('Error updating order status:', error);
+      alert('Error al actualizar el estado del pedido');
     }
   };
 
-  const handleCancelOrder = (orderId: number) => {
+  const handleCancelOrder = (orderId: Order['id']) => {
     setCancellingOrder(orderId);
     setShowCancelModal(true);
   };
@@ -169,63 +136,36 @@ const AdminOrders = () => {
     }
 
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`/api/orders/${cancellingOrder}/cancel`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ reason: cancelReason.trim() }),
-      });
+      await apiService.cancelOrder(cancellingOrder, cancelReason.trim());
 
-      if (response.ok) {
-        const result = await response.json();
-        
-        // Actualizar la lista de pedidos
-        const updatedOrders = orders.map(order =>
-          order.id === cancellingOrder 
-            ? { ...order, status: 'cancelled' as Order['status'], notes: `Pedido cancelado. Motivo: ${cancelReason.trim()}` }
-            : order
-        );
-        setOrders(updatedOrders);
-        setFilteredOrders(updatedOrders);
-        
-        // Cerrar modal y limpiar estado
-        setShowCancelModal(false);
-        setCancelReason('');
-        setCancellingOrder(null);
-        
-        alert('Pedido cancelado exitosamente');
-      } else {
-        const error = await response.json();
-        alert(`Error al cancelar el pedido: ${error.error}`);
-      }
-    } catch (error) {
+      const updatedOrders = orders.map(order =>
+        order.id === cancellingOrder
+          ? { ...order, status: 'cancelled' as Order['status'], cancellation_reason: cancelReason.trim() }
+          : order
+      );
+      setOrders(updatedOrders);
+
+      setShowCancelModal(false);
+      setCancelReason('');
+      setCancellingOrder(null);
+
+      alert('Pedido cancelado exitosamente');
+    } catch (error: any) {
       console.error('Error cancelling order:', error);
-      alert('Error al cancelar el pedido');
+      alert(`Error al cancelar el pedido: ${error.message || 'desconocido'}`);
     }
   };
 
-  const handleWhatsAppConfirm = () => {
+  const handleWhatsAppConfirm = async () => {
     if (!confirmingOrder) return;
-    
-    // Generar mensaje de WhatsApp
-    const message = `¡Hola! Tu pedido ${confirmingOrder.orderNumber} ha sido confirmado y está siendo preparado. 🍔
 
-Detalles del pedido:
-${confirmingOrder.itemsSummary}
+    try {
+      const response = await apiService.getOrderWhatsappLink(confirmingOrder.id);
+      window.open(response.data.url, '_blank');
+    } catch (error) {
+      console.error('Error getting WhatsApp link:', error);
+    }
 
-Total: $${parseFloat(String(confirmingOrder.totalAmount || 0)).toFixed(2)}
-Dirección: ${confirmingOrder.deliveryAddress}
-
-¡Gracias por elegir La Hamburguezona! 😊`;
-
-    // Abrir WhatsApp
-    const whatsappUrl = `https://wa.me/52${confirmingOrder.customerPhone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
-    
-    // Cerrar modal
     setShowWhatsAppModal(false);
     setConfirmingOrder(null);
   };
@@ -270,51 +210,6 @@ Dirección: ${confirmingOrder.deliveryAddress}
     return new Date(dateString).toLocaleString('es-MX');
   };
 
-  const handleCreateCustomer = async () => {
-    if (!selectedOrder) return;
-    
-    try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`/api/orders/${selectedOrder.id}/create-customer`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(customerForm),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        alert('Cliente creado/actualizado exitosamente');
-        setShowCreateCustomerModal(false);
-        setCustomerForm({ name: '', email: '', phone: '', address: '' });
-        
-        // Recargar el pedido para mostrar el email actualizado
-        loadOrders();
-        setSelectedOrder(null);
-      } else {
-        const error = await response.json();
-        alert(`Error: ${error.error}`);
-      }
-    } catch (error) {
-      console.error('Error creating customer:', error);
-      alert('Error al crear cliente');
-    }
-  };
-
-  const openCreateCustomerModal = () => {
-    if (selectedOrder) {
-      setCustomerForm({
-        name: selectedOrder.customerName,
-        email: selectedOrder.customerEmail || '',
-        phone: selectedOrder.customerPhone,
-        address: selectedOrder.deliveryAddress
-      });
-      setShowCreateCustomerModal(true);
-    }
-  };
-
   if (isLoading) {
     return (
       <AdminLayout>
@@ -340,13 +235,13 @@ Dirección: ${confirmingOrder.deliveryAddress}
           </div>
           <div className="flex items-center space-x-4">
             <button
-              onClick={loadOrders}
+              onClick={() => loadOrders()}
               className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
             >
               Recargar
             </button>
             <div className="text-sm text-gray-500">
-              Total: {filteredOrders.length} pedidos
+              Total: {total} pedidos
             </div>
           </div>
         </div>
@@ -370,7 +265,7 @@ Dirección: ${confirmingOrder.deliveryAddress}
               <Filter className="w-5 h-5 text-gray-400" />
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
                 className="border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
                 <option value="all">Todos los estados</option>
@@ -387,7 +282,7 @@ Dirección: ${confirmingOrder.deliveryAddress}
 
         {/* Orders Table */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          {filteredOrders.length === 0 ? (
+          {orders.length === 0 ? (
             <div className="p-12 text-center">
               <div className="text-gray-400 mb-4">
                 <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -397,7 +292,7 @@ Dirección: ${confirmingOrder.deliveryAddress}
               <h3 className="text-lg font-medium text-gray-900 mb-2">No hay pedidos</h3>
               <p className="text-gray-500 mb-4">No se encontraron pedidos que coincidan con los filtros actuales.</p>
               <button
-                onClick={loadOrders}
+                onClick={() => loadOrders()}
                 className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
               >
                 Recargar pedidos
@@ -418,22 +313,29 @@ Dirección: ${confirmingOrder.deliveryAddress}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {filteredOrders.map((order) => (
+                  {orders.map((order) => (
                   <tr key={order.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
-                      <div className="font-semibold text-gray-900">#{order.orderNumber}</div>
-                      <div className="text-sm text-gray-500">{order.paymentMethod}</div>
+                      <div className="font-semibold text-gray-900">#{order.order_number}</div>
+                      <div className="text-sm text-gray-500">{order.payment_method}</div>
+                      {order.scheduled_for && (
+                        <div className="text-xs text-orange-600 font-medium">
+                          ⏰ {new Date(order.scheduled_for).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900">{order.customerName}</div>
-                      <div className="text-sm text-gray-500">{order.customerPhone}</div>
+                      <div className="font-medium text-gray-900">{order.customer_name}</div>
+                      <div className="text-sm text-gray-500">{order.customer_phone}</div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900">{order.itemCount} items</div>
-                      <div className="text-sm text-gray-500">{order.itemsSummary}</div>
+                      <div className="text-sm text-gray-900">{order.items.length} items</div>
+                      <div className="text-sm text-gray-500">
+                        {order.items.map(i => `${i.menu_item_name} x${i.quantity}`).join(', ')}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="font-semibold text-gray-900">${order.totalAmount.toFixed(2)}</div>
+                      <div className="font-semibold text-gray-900">${order.total_amount.toFixed(2)}</div>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
@@ -442,7 +344,7 @@ Dirección: ${confirmingOrder.deliveryAddress}
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900">{formatDate(order.createdAt)}</div>
+                      <div className="text-sm text-gray-900">{formatDate(order.created_at)}</div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
@@ -501,7 +403,49 @@ Dirección: ${confirmingOrder.deliveryAddress}
               </table>
             </div>
           )}
+
+          {/* Paginación */}
+          {total > PAGE_SIZE && (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <p className="text-sm text-gray-600">
+                Mostrando {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} de {total} pedidos
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Anterior
+                </button>
+                <span className="text-sm text-gray-600 px-2">
+                  Página {page} de {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Edit Order Modal */}
+        {editingOrder && (
+          <EditOrderModal
+            order={editingOrder}
+            onClose={() => setEditingOrder(null)}
+            onSaved={(actualizado) => {
+              setEditingOrder(null);
+              setSelectedOrder(actualizado);
+              loadOrders(true);
+              toast.success(`Pedido ${actualizado.order_number} actualizado — nuevo total $${Number(actualizado.total_amount).toFixed(2)}`);
+            }}
+          />
+        )}
 
         {/* Order Detail Modal */}
         {selectedOrder && (
@@ -509,7 +453,7 @@ Dirección: ${confirmingOrder.deliveryAddress}
             <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
               <div className="p-6 border-b border-gray-200">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-gray-900">Detalle del Pedido #{selectedOrder.orderNumber}</h2>
+                  <h2 className="text-2xl font-bold text-gray-900">Detalle del Pedido #{selectedOrder.order_number}</h2>
                   <button
                     onClick={() => setSelectedOrder(null)}
                     className="p-2 text-gray-400 hover:text-gray-600"
@@ -524,39 +468,21 @@ Dirección: ${confirmingOrder.deliveryAddress}
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-lg font-semibold text-gray-900">Información del Cliente</h3>
-                    {selectedOrder.customerEmail && (
-                      <button
-                        onClick={openCreateCustomerModal}
-                        className="btn-primary text-sm px-3 py-1"
-                      >
-                        Crear/Actualizar Cliente
-                      </button>
-                    )}
                   </div>
                   <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                    <p><span className="font-medium">Nombre:</span> {selectedOrder.customerName}</p>
-                    <p><span className="font-medium">Teléfono:</span> {selectedOrder.customerPhone}</p>
-                    <p><span className="font-medium">Dirección:</span> {selectedOrder.deliveryAddress}</p>
-                    {selectedOrder.customerEmail ? (
-                      <div className="flex items-center justify-between">
-                        <p><span className="font-medium">Email:</span> {selectedOrder.customerEmail}</p>
-                        <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded">
-                          Registrado
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between">
-                        <p className="text-orange-600"><span className="font-medium">Email:</span> No registrado</p>
-                        <button
-                          onClick={openCreateCustomerModal}
-                          className="btn-primary text-sm px-3 py-1"
-                        >
-                          Crear Cliente
-                        </button>
-                      </div>
+                    <p><span className="font-medium">Nombre:</span> {selectedOrder.customer_name}</p>
+                    <p><span className="font-medium">Teléfono:</span> {selectedOrder.customer_phone}</p>
+                    <p><span className="font-medium">Dirección:</span> {selectedOrder.delivery_address}</p>
+                    {selectedOrder.customer_email && (
+                      <p><span className="font-medium">Email:</span> {selectedOrder.customer_email}</p>
                     )}
-                    {selectedOrder.deliveryInstructions && (
-                      <p><span className="font-medium">Instrucciones:</span> {selectedOrder.deliveryInstructions}</p>
+                    {selectedOrder.delivery_instructions && (
+                      <p><span className="font-medium">Instrucciones:</span> {selectedOrder.delivery_instructions}</p>
+                    )}
+                    {selectedOrder.scheduled_for && (
+                      <p className="text-orange-600 font-medium">
+                        ⏰ Programado para: {formatDate(selectedOrder.scheduled_for)}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -570,13 +496,18 @@ Dirección: ${confirmingOrder.deliveryAddress}
                         <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                           <div>
                             <p className="font-medium text-gray-900">{item.menu_item_name || `Item ${item.menu_item_id || item.id}`}</p>
+                            {(item.extras || []).length > 0 && (
+                              <p className="text-sm text-primary-600 font-medium">
+                                {(item.extras || []).map((e) => `+ ${e.name} ($${e.price})`).join(' · ')}
+                              </p>
+                            )}
                             <p className="text-sm text-gray-500">Cantidad: {item.quantity}</p>
-                            <p className="text-sm text-gray-500">Precio unitario: ${parseFloat(String(item.unitPrice || 0)).toFixed(2)}</p>
+                            <p className="text-sm text-gray-500">Precio unitario: ${parseFloat(String(item.unit_price || 0)).toFixed(2)}</p>
                             {item.special_instructions && (
                               <p className="text-sm text-orange-600">Nota: {item.special_instructions}</p>
                             )}
                           </div>
-                          <p className="font-semibold text-gray-900">${parseFloat(String(item.totalPrice || 0)).toFixed(2)}</p>
+                          <p className="font-semibold text-gray-900">${parseFloat(String(item.total_price || 0)).toFixed(2)}</p>
                         </div>
                       ))
                     ) : (
@@ -587,62 +518,66 @@ Dirección: ${confirmingOrder.deliveryAddress}
                   </div>
                 </div>
 
-                {/* Order Summary */}
+                {/* Order Summary: totales reales registrados en el pedido */}
                 <div className="border-t border-gray-200 pt-6">
                   <div className="space-y-2">
-                    {(() => {
-                      // Calcular totales basados en los items
-                      const itemsTotal = selectedOrder.items && selectedOrder.items.length > 0 
-                        ? selectedOrder.items.reduce((sum, item) => sum + parseFloat(String(item.totalPrice || 0)), 0)
-                        : 0;
-                      const subtotalWithTax = itemsTotal;
-                      const subtotalWithoutTax = subtotalWithTax / 1.16;
-                      const tax = subtotalWithTax - subtotalWithoutTax;
-                      const deliveryFee = subtotalWithTax >= 200 ? 0 : 30;
-                      const total = subtotalWithTax + deliveryFee;
-                      
-                      return (
-                        <>
-                          <div className="flex items-center justify-between">
-                            <span>Subtotal (sin IVA):</span>
-                            <span>${subtotalWithoutTax.toFixed(2)}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span>IVA (16%):</span>
-                            <span>${tax.toFixed(2)}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span>Envío:</span>
-                            <span>${deliveryFee.toFixed(2)}</span>
-                          </div>
-                          <div className="flex items-center justify-between text-lg font-semibold text-gray-900 border-t pt-2">
-                            <span>Total:</span>
-                            <span>${total.toFixed(2)}</span>
-                          </div>
-                        </>
-                      );
-                    })()}
+                    <div className="flex items-center justify-between">
+                      <span>Subtotal:</span>
+                      <span>${Number(selectedOrder.subtotal).toFixed(2)}</span>
+                    </div>
+                    {Number(selectedOrder.discount) > 0 && (
+                      <div className="flex items-center justify-between text-green-600">
+                        <span>Descuento ({selectedOrder.coupon_code}):</span>
+                        <span>-${Number(selectedOrder.discount).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {Number(selectedOrder.points_discount) > 0 && (
+                      <div className="flex items-center justify-between text-secondary-600">
+                        <span>Puntos canjeados ({selectedOrder.points_redeemed}):</span>
+                        <span>-${Number(selectedOrder.points_discount).toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <span>Envío:</span>
+                      <span>${Number(selectedOrder.delivery_fee).toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm text-gray-400">
+                      <span>IVA incluido (16%):</span>
+                      <span>${Number(selectedOrder.tax).toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-lg font-semibold text-gray-900 border-t pt-2">
+                      <span>Total:</span>
+                      <span>${Number(selectedOrder.total_amount).toFixed(2)}</span>
+                    </div>
                   </div>
                   <div className="mt-4 space-y-2 text-sm text-gray-600">
-                    <p><span className="font-medium">Método de pago:</span> {selectedOrder.paymentMethod}</p>
-                    <p><span className="font-medium">Estado de pago:</span> {selectedOrder.paymentStatus}</p>
-                    <p><span className="font-medium">Fecha de pedido:</span> {formatDate(selectedOrder.createdAt)}</p>
+                    <p><span className="font-medium">Método de pago:</span> {selectedOrder.payment_method}</p>
+                    <p><span className="font-medium">Estado de pago:</span> {selectedOrder.payment_status}</p>
+                    <p><span className="font-medium">Fecha de pedido:</span> {formatDate(selectedOrder.created_at)}</p>
                     {selectedOrder.notes && (
                       <p><span className="font-medium">Notas:</span> {selectedOrder.notes}</p>
                     )}
-                    {selectedOrder.statusNotes && (
-                      <p><span className="font-medium">Notas de estado:</span> {selectedOrder.statusNotes}</p>
+                    {selectedOrder.status_history.length > 0 && (
+                      <p>
+                        <span className="font-medium">Último cambio de estado:</span>{' '}
+                        {selectedOrder.status_history[selectedOrder.status_history.length - 1].notes || getStatusText(selectedOrder.status_history[selectedOrder.status_history.length - 1].status as Order['status'])}
+                      </p>
                     )}
                   </div>
                 </div>
 
                 {/* Action Buttons */}
                 <div className="flex space-x-3 pt-6 border-t border-gray-200">
-                  <button className="flex-1 btn-primary">
-                    Actualizar Estado
-                  </button>
-                  <button className="flex-1 btn-outline">
-                    Contactar Cliente
+                  {!['delivered', 'cancelled'].includes(selectedOrder.status) && selectedOrder.payment_status !== 'paid' && (
+                    <button
+                      onClick={() => setEditingOrder(selectedOrder)}
+                      className="flex-1 btn-primary"
+                    >
+                      Editar Pedido
+                    </button>
+                  )}
+                  <button onClick={() => setSelectedOrder(null)} className="flex-1 btn-outline">
+                    Cerrar
                   </button>
                 </div>
               </div>
@@ -728,7 +663,7 @@ Dirección: ${confirmingOrder.deliveryAddress}
 
                 {/* Mensaje */}
                 <p className="text-gray-600 mb-6">
-                  El pedido <span className="font-semibold">{confirmingOrder.orderNumber}</span> ha sido confirmado. 
+                  El pedido <span className="font-semibold">{confirmingOrder.order_number}</span> ha sido confirmado. 
                   ¿Quieres enviar la confirmación por WhatsApp al cliente?
                 </p>
 
@@ -737,15 +672,15 @@ Dirección: ${confirmingOrder.deliveryAddress}
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Cliente:</span>
-                      <span className="font-medium">{confirmingOrder.customerName}</span>
+                      <span className="font-medium">{confirmingOrder.customer_name}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Teléfono:</span>
-                      <span className="font-medium">{confirmingOrder.customerPhone}</span>
+                      <span className="font-medium">{confirmingOrder.customer_phone}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Total:</span>
-                      <span className="font-medium text-green-600">${parseFloat(String(confirmingOrder.totalAmount || 0)).toFixed(2)}</span>
+                      <span className="font-medium text-green-600">${parseFloat(String(confirmingOrder.total_amount || 0)).toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -776,97 +711,10 @@ Dirección: ${confirmingOrder.deliveryAddress}
           </div>
         )}
 
-        {/* Modal de Crear Cliente */}
-        {showCreateCustomerModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl max-w-md w-full">
-              <div className="p-6 border-b border-gray-200">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-gray-900">Crear/Actualizar Cliente</h2>
-                  <button
-                    onClick={() => setShowCreateCustomerModal(false)}
-                    className="p-2 text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-              
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nombre *
-                  </label>
-                  <input
-                    type="text"
-                    value={customerForm.name}
-                    onChange={(e) => setCustomerForm({...customerForm, name: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email *
-                  </label>
-                  <input
-                    type="email"
-                    value={customerForm.email}
-                    onChange={(e) => setCustomerForm({...customerForm, email: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Teléfono *
-                  </label>
-                  <input
-                    type="tel"
-                    value={customerForm.phone}
-                    onChange={(e) => setCustomerForm({...customerForm, phone: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Dirección
-                  </label>
-                  <textarea
-                    value={customerForm.address}
-                    onChange={(e) => setCustomerForm({...customerForm, address: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    rows={3}
-                  />
-                </div>
-              </div>
-              
-              <div className="p-6 border-t border-gray-200 flex space-x-3">
-                <button
-                  onClick={() => setShowCreateCustomerModal(false)}
-                  className="flex-1 btn-outline"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleCreateCustomer}
-                  className="flex-1 btn-primary"
-                  disabled={!customerForm.name || !customerForm.email || !customerForm.phone}
-                >
-                  Crear Cliente
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </AdminLayout>
   );
 };
 
-export default AdminOrders;
+export default withAuth(AdminOrders);
 

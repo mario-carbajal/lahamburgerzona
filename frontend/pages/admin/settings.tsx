@@ -1,123 +1,76 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import AdminLayout from '../../components/Admin/AdminLayout';
-import { 
-  Settings, 
+import { withAuth } from '../../middleware/auth';
+import {
+  Settings,
   Save,
-  User,
-  Mail,
-  Phone,
-  MapPin,
   Clock,
-  Bell,
   Shield,
-  Globe
+  Eye,
+  EyeOff,
+  KeyRound,
+  Upload,
+  Trash2
 } from 'lucide-react';
 import apiService from '../../services/api';
 
+// Solo campos respaldados por la tabla `settings` del backend (clave-valor).
 interface RestaurantSettings {
-  general: {
-    name: string;
-    description: string;
-    logo: string;
-    address: string;
-    phone: string;
-    email: string;
-    website: string;
-  };
-  business: {
-    openingHours: {
-      monday: { open: string; close: string; closed: boolean };
-      tuesday: { open: string; close: string; closed: boolean };
-      wednesday: { open: string; close: string; closed: boolean };
-      thursday: { open: string; close: string; closed: boolean };
-      friday: { open: string; close: string; closed: boolean };
-      saturday: { open: string; close: string; closed: boolean };
-      sunday: { open: string; close: string; closed: boolean };
-    };
-    deliveryZone: string;
-    deliveryFee: number;
-    minimumOrder: number;
-    averagePrepTime: number;
-  };
-  notifications: {
-    emailNotifications: boolean;
-    smsNotifications: boolean;
-    pushNotifications: boolean;
-    newOrderAlerts: boolean;
-    lowStockAlerts: boolean;
-  };
-  security: {
-    adminPassword: string;
-    sessionTimeout: number;
-    twoFactorAuth: boolean;
-    ipWhitelist: string[];
-  };
+  restaurant_name: string;
+  restaurant_phone: string;
+  restaurant_email: string;
+  restaurant_address: string;
+  restaurant_city: string;
+  opening_hours: string;
+  whatsapp_number: string;
+  facebook_url: string;
+  logo_url: string;
+  slogan: string;
+  delivery_fee: number;
+  free_delivery_threshold: number;
 }
 
-const AdminSettings = () => {
-  const [settings, setSettings] = useState<RestaurantSettings>({
-    general: {
-      name: 'La Hamburguezona',
-      description: '¡Sabor que conquista!',
-      logo: '/logo.png',
-      address: 'Calle Principal 123, Ciudad de México',
-      phone: '+52 555-0123',
-      email: 'contacto@lahamburguezona.com',
-      website: 'https://lahamburguezona.com'
-    },
-    business: {
-      openingHours: {
-        monday: { open: '09:00', close: '22:00', closed: false },
-        tuesday: { open: '09:00', close: '22:00', closed: false },
-        wednesday: { open: '09:00', close: '22:00', closed: false },
-        thursday: { open: '09:00', close: '22:00', closed: false },
-        friday: { open: '09:00', close: '23:00', closed: false },
-        saturday: { open: '10:00', close: '23:00', closed: false },
-        sunday: { open: '10:00', close: '21:00', closed: false }
-      },
-      deliveryZone: 'Ciudad de México y alrededores',
-      deliveryFee: 30,
-      minimumOrder: 200,
-      averagePrepTime: 15
-    },
-    notifications: {
-      emailNotifications: true,
-      smsNotifications: true,
-      pushNotifications: true,
-      newOrderAlerts: true,
-      lowStockAlerts: true
-    },
-    security: {
-      adminPassword: '',
-      sessionTimeout: 60,
-      twoFactorAuth: false,
-      ipWhitelist: []
-    }
-  });
+const DEFAULT_SETTINGS: RestaurantSettings = {
+  restaurant_name: 'La Hamburguezona',
+  restaurant_phone: '',
+  restaurant_email: '',
+  restaurant_address: '',
+  restaurant_city: '',
+  opening_hours: '',
+  whatsapp_number: '',
+  facebook_url: '',
+  logo_url: '',
+  slogan: '',
+  delivery_fee: 30,
+  free_delivery_threshold: 200,
+};
 
+const AdminSettings = () => {
+  const [settings, setSettings] = useState<RestaurantSettings>(DEFAULT_SETTINGS);
   const [activeTab, setActiveTab] = useState('general');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Subida de logo (se guarda al instante, sin depender del botón "Guardar Cambios")
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  // Cambio de contraseña (endpoint real: PUT /auth/cambiar-password)
+  const [passwordForm, setPasswordForm] = useState({
+    actual: '',
+    nueva: '',
+    confirmar: '',
+  });
+  const [showPasswords, setShowPasswords] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
   const tabs = [
     { id: 'general', name: 'General', icon: Settings },
-    { id: 'business', name: 'Negocio', icon: Clock },
-    { id: 'notifications', name: 'Notificaciones', icon: Bell },
-    { id: 'security', name: 'Seguridad', icon: Shield }
+    { id: 'delivery', name: 'Envíos', icon: Clock },
+    { id: 'security', name: 'Seguridad', icon: Shield },
   ];
 
-  const daysOfWeek = [
-    { key: 'monday', label: 'Lunes' },
-    { key: 'tuesday', label: 'Martes' },
-    { key: 'wednesday', label: 'Miércoles' },
-    { key: 'thursday', label: 'Jueves' },
-    { key: 'friday', label: 'Viernes' },
-    { key: 'saturday', label: 'Sábado' },
-    { key: 'sunday', label: 'Domingo' }
-  ];
-
-  // Cargar configuración al montar el componente
   useEffect(() => {
     loadSettings();
   }, []);
@@ -126,10 +79,52 @@ const AdminSettings = () => {
     try {
       setIsLoading(true);
       const response = await apiService.getSettings();
-      console.log('Settings response:', response);
-      if (response.success) {
-        setSettings(response.data);
-      }
+      const rows = response.data as { setting_key: string; setting_value: string }[];
+
+      setSettings(prev => {
+        const next = { ...prev };
+        for (const row of rows) {
+          switch (row.setting_key) {
+            case 'restaurant_name':
+              next.restaurant_name = row.setting_value;
+              break;
+            case 'restaurant_phone':
+              next.restaurant_phone = row.setting_value;
+              break;
+            case 'restaurant_email':
+              next.restaurant_email = row.setting_value;
+              break;
+            case 'restaurant_address':
+              next.restaurant_address = row.setting_value;
+              break;
+            case 'restaurant_city':
+              next.restaurant_city = row.setting_value;
+              break;
+            case 'opening_hours':
+              next.opening_hours = row.setting_value;
+              break;
+            case 'whatsapp_number':
+              next.whatsapp_number = row.setting_value;
+              break;
+            case 'facebook_url':
+              next.facebook_url = row.setting_value;
+              break;
+            case 'logo_url':
+              next.logo_url = row.setting_value;
+              break;
+            case 'slogan':
+              next.slogan = row.setting_value;
+              break;
+            case 'delivery_fee':
+              next.delivery_fee = Number(row.setting_value);
+              break;
+            case 'free_delivery_threshold':
+              next.free_delivery_threshold = Number(row.setting_value);
+              break;
+          }
+        }
+        return next;
+      });
     } catch (error) {
       console.error('Error loading settings:', error);
     } finally {
@@ -140,13 +135,21 @@ const AdminSettings = () => {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const response = await apiService.updateSettings({ settings });
-      console.log('Save response:', response);
-      if (response.success) {
-        alert('Configuración guardada correctamente');
-      } else {
-        throw new Error(response.message);
-      }
+      await Promise.all([
+        apiService.updateSetting('restaurant_name', settings.restaurant_name),
+        apiService.updateSetting('restaurant_phone', settings.restaurant_phone),
+        apiService.updateSetting('restaurant_email', settings.restaurant_email),
+        apiService.updateSetting('restaurant_address', settings.restaurant_address),
+        apiService.updateSetting('restaurant_city', settings.restaurant_city),
+        apiService.updateSetting('opening_hours', settings.opening_hours),
+        apiService.updateSetting('whatsapp_number', settings.whatsapp_number),
+        apiService.updateSetting('facebook_url', settings.facebook_url),
+        apiService.updateSetting('logo_url', settings.logo_url),
+        apiService.updateSetting('slogan', settings.slogan),
+        apiService.updateSetting('delivery_fee', String(settings.delivery_fee)),
+        apiService.updateSetting('free_delivery_threshold', String(settings.free_delivery_threshold)),
+      ]);
+      alert('Configuración guardada correctamente');
     } catch (error) {
       console.error('Error saving settings:', error);
       alert('Error al guardar la configuración');
@@ -155,30 +158,64 @@ const AdminSettings = () => {
     }
   };
 
-  const updateSetting = (section: keyof RestaurantSettings, field: string, value: any) => {
-    setSettings(prev => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        [field]: value
-      }
-    }));
+  const handleChangePassword = async () => {
+    if (!passwordForm.actual || !passwordForm.nueva) {
+      alert('Completa todos los campos');
+      return;
+    }
+    if (passwordForm.nueva.length < 8) {
+      alert('La contraseña nueva debe tener al menos 8 caracteres');
+      return;
+    }
+    if (passwordForm.nueva !== passwordForm.confirmar) {
+      alert('La contraseña nueva y su confirmación no coinciden');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      await apiService.cambiarPassword(passwordForm.actual, passwordForm.nueva);
+      setPasswordForm({ actual: '', nueva: '', confirmar: '' });
+      alert('Contraseña actualizada correctamente. Úsala en tu próximo inicio de sesión.');
+    } catch (error: any) {
+      console.error('Error changing password:', error);
+      alert(error.message || 'Error al cambiar la contraseña');
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
-  const updateOpeningHours = (day: string, field: string, value: any) => {
-    setSettings(prev => ({
-      ...prev,
-      business: {
-        ...prev.business,
-        openingHours: {
-          ...prev.business.openingHours,
-          [day]: {
-            ...prev.business.openingHours[day as keyof typeof prev.business.openingHours],
-            [field]: value
-          }
-        }
-      }
-    }));
+  const updateField = (field: keyof RestaurantSettings, value: string | number) => {
+    setSettings(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingLogo(true);
+    try {
+      const res = await apiService.uploadImage(file);
+      const url = res.data.url;
+      await apiService.updateSetting('logo_url', url);
+      updateField('logo_url', url);
+    } catch (error: any) {
+      console.error('Error uploading logo:', error);
+      alert(error.message || 'Error al subir el logo');
+    } finally {
+      setIsUploadingLogo(false);
+      if (logoInputRef.current) logoInputRef.current.value = '';
+    }
+  };
+
+  const handleLogoRemove = async () => {
+    if (!confirm('¿Quitar el logo y volver al logo por defecto (🍔)?')) return;
+    try {
+      await apiService.updateSetting('logo_url', '');
+      updateField('logo_url', '');
+    } catch (error: any) {
+      console.error('Error removing logo:', error);
+      alert(error.message || 'Error al quitar el logo');
+    }
   };
 
   if (isLoading) {
@@ -197,32 +234,85 @@ const AdminSettings = () => {
   const renderGeneralTab = () => (
     <div className="space-y-6">
       <div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Logo del Sitio</h3>
+        <div className="flex items-center gap-6">
+          {settings.logo_url ? (
+            <img
+              src={settings.logo_url}
+              alt="Logo actual"
+              className="w-20 h-20 rounded-full object-cover border border-gray-200 shadow-sm"
+            />
+          ) : (
+            <div className="w-20 h-20 bg-gradient-to-br from-orange-400 to-red-500 rounded-full flex items-center justify-center shadow-sm">
+              <span className="text-white font-bold text-3xl">🍔</span>
+            </div>
+          )}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => logoInputRef.current?.click()}
+                disabled={isUploadingLogo}
+                className="btn-primary flex items-center space-x-2 disabled:opacity-50"
+              >
+                <Upload className="w-4 h-4" />
+                <span>{isUploadingLogo ? 'Subiendo...' : settings.logo_url ? 'Cambiar Logo' : 'Subir Logo'}</span>
+              </button>
+              {settings.logo_url && (
+                <button
+                  type="button"
+                  onClick={handleLogoRemove}
+                  className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Quitar</span>
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-gray-500">
+              JPG, PNG o WEBP, máximo 5MB. Se muestra redondo en el encabezado y pie del sitio —
+              lo ideal es una imagen cuadrada. Se guarda al instante al subirlo.
+            </p>
+          </div>
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleLogoUpload}
+            className="hidden"
+          />
+        </div>
+      </div>
+
+      <div className="border-t border-gray-100 pt-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Información General</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Nombre del Restaurante</label>
             <input
               type="text"
-              value={settings.general.name}
-              onChange={(e) => updateSetting('general', 'name', e.target.value)}
+              value={settings.restaurant_name}
+              onChange={(e) => updateField('restaurant_name', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Descripción</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Eslogan</label>
             <input
               type="text"
-              value={settings.general.description}
-              onChange={(e) => updateSetting('general', 'description', e.target.value)}
+              value={settings.slogan}
+              onChange={(e) => updateField('slogan', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="¡Sabor que conquista!"
             />
+            <p className="text-xs text-gray-500 mt-1">Se muestra bajo el nombre en el encabezado y pie del sitio.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Teléfono</label>
             <input
               type="tel"
-              value={settings.general.phone}
-              onChange={(e) => updateSetting('general', 'phone', e.target.value)}
+              value={settings.restaurant_phone}
+              onChange={(e) => updateField('restaurant_phone', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>
@@ -230,8 +320,8 @@ const AdminSettings = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
             <input
               type="email"
-              value={settings.general.email}
-              onChange={(e) => updateSetting('general', 'email', e.target.value)}
+              value={settings.restaurant_email}
+              onChange={(e) => updateField('restaurant_email', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>
@@ -239,103 +329,52 @@ const AdminSettings = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Dirección</label>
             <textarea
               rows={3}
-              value={settings.general.address}
-              onChange={(e) => updateSetting('general', 'address', e.target.value)}
+              value={settings.restaurant_address}
+              onChange={(e) => updateField('restaurant_address', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Sitio Web</label>
-            <input
-              type="url"
-              value={settings.general.website}
-              onChange={(e) => updateSetting('general', 'website', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderBusinessTab = () => (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Horarios de Atención</h3>
-        <div className="space-y-4">
-          {daysOfWeek.map((day) => (
-            <div key={day.key} className="flex items-center space-x-4">
-              <div className="w-24">
-                <label className="block text-sm font-medium text-gray-700">{day.label}</label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={!settings.business.openingHours[day.key as keyof typeof settings.business.openingHours].closed}
-                  onChange={(e) => updateOpeningHours(day.key, 'closed', !e.target.checked)}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm text-gray-600">Abierto</span>
-              </div>
-              {!settings.business.openingHours[day.key as keyof typeof settings.business.openingHours].closed && (
-                <>
-                  <input
-                    type="time"
-                    value={settings.business.openingHours[day.key as keyof typeof settings.business.openingHours].open}
-                    onChange={(e) => updateOpeningHours(day.key, 'open', e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
-                  <span className="text-gray-500">a</span>
-                  <input
-                    type="time"
-                    value={settings.business.openingHours[day.key as keyof typeof settings.business.openingHours].close}
-                    onChange={(e) => updateOpeningHours(day.key, 'close', e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Configuración de Delivery</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Zona de Delivery</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Ciudad</label>
             <input
               type="text"
-              value={settings.business.deliveryZone}
-              onChange={(e) => updateSetting('business', 'deliveryZone', e.target.value)}
+              value={settings.restaurant_city}
+              onChange={(e) => updateField('restaurant_city', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Xalapa, Veracruz"
             />
+            <p className="text-xs text-gray-500 mt-1">Se muestra en el encabezado y pie del sitio.</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Costo de Delivery</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Horario</label>
             <input
-              type="number"
-              value={settings.business.deliveryFee}
-              onChange={(e) => updateSetting('business', 'deliveryFee', parseFloat(e.target.value))}
+              type="text"
+              value={settings.opening_hours}
+              onChange={(e) => updateField('opening_hours', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Mar - Sáb · 16:00 - 22:00"
             />
+            <p className="text-xs text-gray-500 mt-1">Texto libre, tal como quieres que se vea en el sitio.</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Pedido Mínimo</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">WhatsApp para Pedidos</label>
             <input
-              type="number"
-              value={settings.business.minimumOrder}
-              onChange={(e) => updateSetting('business', 'minimumOrder', parseFloat(e.target.value))}
+              type="tel"
+              value={settings.whatsapp_number}
+              onChange={(e) => updateField('whatsapp_number', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="2281440319"
             />
+            <p className="text-xs text-gray-500 mt-1">10 dígitos sin lada de país. Aquí llegan los pedidos de los clientes.</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Tiempo Promedio de Preparación (min)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Facebook (URL)</label>
             <input
-              type="number"
-              value={settings.business.averagePrepTime}
-              onChange={(e) => updateSetting('business', 'averagePrepTime', parseInt(e.target.value))}
+              type="url"
+              value={settings.facebook_url}
+              onChange={(e) => updateField('facebook_url', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="https://www.facebook.com/..."
             />
           </div>
         </div>
@@ -343,70 +382,32 @@ const AdminSettings = () => {
     </div>
   );
 
-  const renderNotificationsTab = () => (
+  const renderDeliveryTab = () => (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Configuración de Notificaciones</h3>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="font-medium text-gray-900">Notificaciones por Email</h4>
-              <p className="text-sm text-gray-500">Recibir notificaciones importantes por correo electrónico</p>
-            </div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Configuración de Envíos</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Costo de Envío ($)</label>
             <input
-              type="checkbox"
-              checked={settings.notifications.emailNotifications}
-              onChange={(e) => updateSetting('notifications', 'emailNotifications', e.target.checked)}
-              className="rounded border-gray-300"
+              type="number"
+              min={0}
+              value={settings.delivery_fee}
+              onChange={(e) => updateField('delivery_fee', parseFloat(e.target.value) || 0)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
+            <p className="text-xs text-gray-500 mt-1">Se cobra en cada pedido a domicilio.</p>
           </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="font-medium text-gray-900">Notificaciones por SMS</h4>
-              <p className="text-sm text-gray-500">Recibir alertas importantes por mensaje de texto</p>
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Envío Gratis a Partir de ($)</label>
             <input
-              type="checkbox"
-              checked={settings.notifications.smsNotifications}
-              onChange={(e) => updateSetting('notifications', 'smsNotifications', e.target.checked)}
-              className="rounded border-gray-300"
+              type="number"
+              min={0}
+              value={settings.free_delivery_threshold}
+              onChange={(e) => updateField('free_delivery_threshold', parseFloat(e.target.value) || 0)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="font-medium text-gray-900">Notificaciones Push</h4>
-              <p className="text-sm text-gray-500">Recibir notificaciones en tiempo real en el navegador</p>
-            </div>
-            <input
-              type="checkbox"
-              checked={settings.notifications.pushNotifications}
-              onChange={(e) => updateSetting('notifications', 'pushNotifications', e.target.checked)}
-              className="rounded border-gray-300"
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="font-medium text-gray-900">Alertas de Nuevos Pedidos</h4>
-              <p className="text-sm text-gray-500">Recibir notificación inmediata cuando llegue un nuevo pedido</p>
-            </div>
-            <input
-              type="checkbox"
-              checked={settings.notifications.newOrderAlerts}
-              onChange={(e) => updateSetting('notifications', 'newOrderAlerts', e.target.checked)}
-              className="rounded border-gray-300"
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="font-medium text-gray-900">Alertas de Stock Bajo</h4>
-              <p className="text-sm text-gray-500">Recibir notificación cuando un producto tenga stock bajo</p>
-            </div>
-            <input
-              type="checkbox"
-              checked={settings.notifications.lowStockAlerts}
-              onChange={(e) => updateSetting('notifications', 'lowStockAlerts', e.target.checked)}
-              className="rounded border-gray-300"
-            />
+            <p className="text-xs text-gray-500 mt-1">Pedidos con subtotal mayor a este monto no pagan envío.</p>
           </div>
         </div>
       </div>
@@ -416,39 +417,55 @@ const AdminSettings = () => {
   const renderSecurityTab = () => (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Configuración de Seguridad</h3>
-        <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Cambiar Mi Contraseña</h3>
+        <div className="max-w-md space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Cambiar Contraseña de Administrador</label>
-            <input
-              type="password"
-              placeholder="Nueva contraseña"
-              value={settings.security.adminPassword}
-              onChange={(e) => updateSetting('security', 'adminPassword', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Timeout de Sesión (minutos)</label>
-            <input
-              type="number"
-              value={settings.security.sessionTimeout}
-              onChange={(e) => updateSetting('security', 'sessionTimeout', parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="font-medium text-gray-900">Autenticación de Dos Factores</h4>
-              <p className="text-sm text-gray-500">Agregar una capa adicional de seguridad</p>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Contraseña Actual</label>
+            <div className="relative">
+              <input
+                type={showPasswords ? 'text' : 'password'}
+                value={passwordForm.actual}
+                onChange={(e) => setPasswordForm(prev => ({ ...prev, actual: e.target.value }))}
+                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                placeholder="Tu contraseña actual"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPasswords(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showPasswords ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Contraseña Nueva</label>
             <input
-              type="checkbox"
-              checked={settings.security.twoFactorAuth}
-              onChange={(e) => updateSetting('security', 'twoFactorAuth', e.target.checked)}
-              className="rounded border-gray-300"
+              type={showPasswords ? 'text' : 'password'}
+              value={passwordForm.nueva}
+              onChange={(e) => setPasswordForm(prev => ({ ...prev, nueva: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Mínimo 8 caracteres"
             />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Confirmar Contraseña Nueva</label>
+            <input
+              type={showPasswords ? 'text' : 'password'}
+              value={passwordForm.confirmar}
+              onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmar: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Repite la contraseña nueva"
+            />
+          </div>
+          <button
+            onClick={handleChangePassword}
+            disabled={isChangingPassword}
+            className="btn-primary flex items-center space-x-2 disabled:opacity-50"
+          >
+            <KeyRound className="w-5 h-5" />
+            <span>{isChangingPassword ? 'Actualizando...' : 'Actualizar Contraseña'}</span>
+          </button>
         </div>
       </div>
     </div>
@@ -467,14 +484,16 @@ const AdminSettings = () => {
             <h1 className="text-3xl font-bold text-gray-900">Configuración</h1>
             <p className="text-gray-600 mt-2">Administra la configuración del sistema</p>
           </div>
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="btn-primary flex items-center space-x-2 disabled:opacity-50"
-          >
-            <Save className="w-5 h-5" />
-            <span>{isSaving ? 'Guardando...' : 'Guardar Cambios'}</span>
-          </button>
+          {activeTab !== 'security' && (
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="btn-primary flex items-center space-x-2 disabled:opacity-50"
+            >
+              <Save className="w-5 h-5" />
+              <span>{isSaving ? 'Guardando...' : 'Guardar Cambios'}</span>
+            </button>
+          )}
         </div>
 
         {/* Tabs */}
@@ -503,8 +522,7 @@ const AdminSettings = () => {
 
           <div className="p-6">
             {activeTab === 'general' && renderGeneralTab()}
-            {activeTab === 'business' && renderBusinessTab()}
-            {activeTab === 'notifications' && renderNotificationsTab()}
+            {activeTab === 'delivery' && renderDeliveryTab()}
             {activeTab === 'security' && renderSecurityTab()}
           </div>
         </div>
@@ -513,4 +531,4 @@ const AdminSettings = () => {
   );
 };
 
-export default AdminSettings;
+export default withAuth(AdminSettings, 'ADMIN');

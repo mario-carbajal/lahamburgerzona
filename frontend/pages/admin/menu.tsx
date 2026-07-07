@@ -1,20 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import AdminLayout from '../../components/Admin/AdminLayout';
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Search, 
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Search,
   Filter,
   Eye,
   EyeOff,
   Star,
   Clock,
-  Flame
+  Flame,
+  ChefHat
 } from 'lucide-react';
 import apiService, { MenuItem } from '../../services/api';
 import ImageUpload from '../../components/UI/ImageUpload';
+import RecetaModal from '../../components/Admin/RecetaModal';
+import ExtrasEditorModal from '../../components/Admin/ExtrasEditorModal';
+import { withAuth, useAuth } from '../../middleware/auth';
 
 const AdminMenu = () => {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -27,6 +31,9 @@ const AdminMenu = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [recetaItem, setRecetaItem] = useState<MenuItem | null>(null);
+  const [extrasItem, setExtrasItem] = useState<MenuItem | null>(null);
+  const auth = useAuth();
   const [editingProduct, setEditingProduct] = useState({
     name: '',
     description: '',
@@ -73,12 +80,8 @@ const AdminMenu = () => {
   const loadMenuItems = async () => {
     try {
       setIsLoading(true);
-      const response = await apiService.getAllMenuItems();
-      if (response.success) {
-        setMenuItems(response.data);
-      } else {
-        throw new Error(response.message || 'Error al cargar el menú');
-      }
+      const response = await apiService.getMenuItems();
+      setMenuItems(response.data);
     } catch (error) {
       console.error('Error loading menu items:', error);
       alert('Error al cargar los items del menú');
@@ -110,16 +113,12 @@ const AdminMenu = () => {
       if (!item) return;
 
       const newStatus = !item.is_active;
-      const response = await apiService.updateMenuItemStatus(itemId, newStatus);
-      
-      if (response.success) {
-        setMenuItems(menuItems.map(item =>
-          item.id === itemId ? { ...item, is_active: newStatus } : item
-        ));
-        alert(`Item ${newStatus ? 'activado' : 'desactivado'} correctamente`);
-      } else {
-        throw new Error(response.message || 'Error al actualizar el estado');
-      }
+      await apiService.updateMenuItem(itemId, { is_active: newStatus });
+
+      setMenuItems(menuItems.map(item =>
+        item.id === itemId ? { ...item, is_active: newStatus } : item
+      ));
+      alert(`Item ${newStatus ? 'activado' : 'desactivado'} correctamente`);
     } catch (error) {
       console.error('Error updating item status:', error);
       alert('Error al actualizar el estado del item');
@@ -129,14 +128,9 @@ const AdminMenu = () => {
   const deleteItem = async (itemId: string) => {
     if (confirm('¿Estás seguro de que quieres eliminar este item del menú?')) {
       try {
-        const response = await apiService.deleteMenuItemAdmin(itemId);
-
-        if (response.success) {
-          setMenuItems(menuItems.filter(item => item.id !== itemId));
-          alert('Item eliminado correctamente');
-        } else {
-          throw new Error(response.message || 'Error al eliminar el item');
-        }
+        await apiService.deleteMenuItem(itemId);
+        setMenuItems(menuItems.filter(item => item.id !== itemId));
+        alert('Item eliminado correctamente');
       } catch (error) {
         console.error('Error deleting item:', error);
         alert('Error al eliminar el item');
@@ -168,33 +162,29 @@ const AdminMenu = () => {
         ingredients: newProduct.ingredients ? newProduct.ingredients.split(',').map(ing => ing.trim()) : []
       };
 
-      const response = await apiService.createMenuItemAdmin(productData);
+      const response = await apiService.createMenuItem(productData);
 
-      if (response.success) {
-        // Agregar el nuevo producto a la lista
-        setMenuItems([...menuItems, response.data]);
-        
-        // Limpiar el formulario
-        setNewProduct({
-          name: '',
-          description: '',
-          price: '',
-          image: '',
-          category: '',
-          rating: '',
-          prep_time: '',
-          is_popular: false,
-          is_spicy: false,
-          is_active: true,
-          ingredients: ''
-        });
-        
-        // Cerrar el modal
-        setIsAddModalOpen(false);
-        alert('Producto creado correctamente');
-      } else {
-        throw new Error(response.message || 'Error al crear el producto');
-      }
+      // Agregar el nuevo producto a la lista
+      setMenuItems([...menuItems, response.data]);
+
+      // Limpiar el formulario
+      setNewProduct({
+        name: '',
+        description: '',
+        price: '',
+        image: '',
+        category: '',
+        rating: '',
+        prep_time: '',
+        is_popular: false,
+        is_spicy: false,
+        is_active: true,
+        ingredients: ''
+      });
+
+      // Cerrar el modal
+      setIsAddModalOpen(false);
+      alert('Producto creado correctamente');
     } catch (error: any) {
       console.error('Error creating product:', error);
       alert(error.message || 'Error al crear el producto');
@@ -217,7 +207,7 @@ const AdminMenu = () => {
       is_popular: item.is_popular || false,
       is_spicy: item.is_spicy || false,
       is_active: item.is_active,
-      ingredients: item.ingredients.join(', ')
+      ingredients: (item.ingredients || []).join(', ')
     });
     setIsEditModalOpen(true);
   };
@@ -250,21 +240,17 @@ const AdminMenu = () => {
 
       console.log('Updating product with data:', productData);
 
-      const response = await apiService.updateMenuItemAdmin(selectedItem.id, productData);
+      await apiService.updateMenuItem(selectedItem.id, productData);
 
-      if (response.success) {
-        // Actualizar el producto en la lista
-        setMenuItems(menuItems.map(item => 
-          item.id === selectedItem.id ? { ...item, ...productData } : item
-        ));
-        
-        // Cerrar el modal
-        setIsEditModalOpen(false);
-        setSelectedItem(null);
-        alert('Producto actualizado correctamente');
-      } else {
-        throw new Error(response.message || 'Error al actualizar el producto');
-      }
+      // Actualizar el producto en la lista
+      setMenuItems(menuItems.map(item =>
+        item.id === selectedItem.id ? { ...item, ...productData } : item
+      ));
+
+      // Cerrar el modal
+      setIsEditModalOpen(false);
+      setSelectedItem(null);
+      alert('Producto actualizado correctamente');
     } catch (error: any) {
       console.error('Error updating product:', error);
       alert(error.message || 'Error al actualizar el producto');
@@ -416,6 +402,22 @@ const AdminMenu = () => {
                         </>
                       )}
                     </button>
+                    <button
+                      onClick={() => setRecetaItem(item)}
+                      className="p-2 text-gray-400 hover:text-primary-500 transition-colors"
+                      title="Receta e insumos (food cost)"
+                    >
+                      <ChefHat className="w-4 h-4" />
+                    </button>
+                    {auth.hasRole('ADMIN') && (
+                      <button
+                        onClick={() => setExtrasItem(item)}
+                        className="p-2 text-gray-400 hover:text-primary-500 transition-colors"
+                        title="Extras con precio (doble carne, tocino...)"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       onClick={() => openEditModal(item)}
                       className="p-2 text-gray-400 hover:text-primary-500 transition-colors"
@@ -791,10 +793,29 @@ const AdminMenu = () => {
             </div>
           </div>
         )}
+        {/* Modal de extras con precio */}
+        {extrasItem && (
+          <ExtrasEditorModal
+            menuItemId={Number(extrasItem.id)}
+            menuItemName={extrasItem.name}
+            onClose={() => setExtrasItem(null)}
+          />
+        )}
+
+        {/* Modal de receta (insumos por producto) */}
+        {recetaItem && (
+          <RecetaModal
+            menuItemId={Number(recetaItem.id)}
+            menuItemName={recetaItem.name}
+            menuItemPrice={Number(recetaItem.price)}
+            canEdit={auth.hasRole('ADMIN')}
+            onClose={() => setRecetaItem(null)}
+          />
+        )}
       </div>
     </AdminLayout>
   );
 };
 
-export default AdminMenu;
+export default withAuth(AdminMenu, ['ADMIN', 'COCINA']);
 

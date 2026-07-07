@@ -38,7 +38,7 @@ const DynamicHero: React.FC<DynamicHeroProps> = ({
     try {
       setIsLoading(true);
       const response = await apiService.getHeroImages();
-      if (response.success && response.data.length > 0) {
+      if (response.ok && response.data.length > 0) {
         setHeroImages(response.data);
       }
     } catch (error) {
@@ -49,13 +49,13 @@ const DynamicHero: React.FC<DynamicHeroProps> = ({
         title: '¡Sabor que conquista!',
         subtitle: 'Bienvenido a',
         description: 'Descubre el sabor auténtico de las mejores hamburguesas de la ciudad. Ingredientes frescos, preparación artesanal y un sabor que te conquistará desde el primer bocado.',
-        imageUrl: '/images/hero-bg.jpg',
-        ctaText: '¡Ordena Ahora!',
-        ctaLink: '/pedidos',
-        isActive: true,
-        sortOrder: 1,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        image_url: '/images/hero-bg.jpg',
+        cta_text: '¡Ordena Ahora!',
+        cta_link: '/pedidos',
+        is_active: true,
+        sort_order: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       }]);
     } finally {
       setIsLoading(false);
@@ -114,7 +114,7 @@ const DynamicHero: React.FC<DynamicHeroProps> = ({
       {/* Background Image */}
       <div className="absolute inset-0 z-0">
         <Image
-          src={getImageUrl(currentHero.imageUrl)}
+          src={getImageUrl(currentHero.image_url)}
           alt={currentHero.title}
           fill
           className="object-cover"
@@ -149,15 +149,15 @@ const DynamicHero: React.FC<DynamicHeroProps> = ({
           <div className="text-white space-y-8">
             <div className="space-y-4">
               {currentHero.subtitle && (
-                <p className="text-secondary-400 text-lg font-medium tracking-wide uppercase">
+                <p className="text-secondary-400 text-sm sm:text-base font-semibold tracking-wider uppercase">
                   {currentHero.subtitle}
                 </p>
               )}
-              <h1 className="text-5xl lg:text-7xl font-bold leading-tight">
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-[1.1] tracking-tight">
                 {currentHero.title}
               </h1>
               {currentHero.description && (
-                <p className="text-xl text-gray-200 leading-relaxed max-w-lg">
+                <p className="text-lg text-gray-200 leading-relaxed max-w-lg">
                   {currentHero.description}
                 </p>
               )}
@@ -165,17 +165,19 @@ const DynamicHero: React.FC<DynamicHeroProps> = ({
 
             {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link href={currentHero.ctaLink}>
+              <Link href={currentHero.cta_link}>
                 <button className="btn-primary text-lg px-8 py-4 flex items-center space-x-2 group">
-                  <span>{currentHero.ctaText}</span>
+                  <span>{currentHero.cta_text}</span>
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </button>
               </Link>
-              <Link href="/menu">
-                <button className="btn-outline text-lg px-8 py-4 border-white text-white hover:bg-white hover:text-gray-900">
-                  Ver Menú
-                </button>
-              </Link>
+              {currentHero.cta_link !== '/menu' && (
+                <Link href="/menu">
+                  <button className="btn-outline text-lg px-8 py-4 border-white text-white hover:bg-white hover:text-gray-900">
+                    Ver Menú
+                  </button>
+                </Link>
+              )}
             </div>
 
             {/* Stats */}
@@ -198,8 +200,8 @@ const DynamicHero: React.FC<DynamicHeroProps> = ({
           <div className="relative">
             <div className="relative z-10 animate-float">
               <Image
-                src="/images/hero-burger.png"
-                alt="Delicious Burger"
+                src="/images/hero/hero-burger.png"
+                alt="Deliciosa hamburguesa"
                 width={500}
                 height={500}
                 className="w-full max-w-lg mx-auto"

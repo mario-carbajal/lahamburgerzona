@@ -3,9 +3,11 @@ import Head from 'next/head';
 import { Users, Plus, Edit, Trash2, Shield, ChefHat, Truck, CreditCard, Eye, EyeOff } from 'lucide-react';
 import AdminLayout from '../../components/Admin/AdminLayout';
 import { withAuth } from '../../middleware/auth';
+import apiService from '../../services/api';
+import type { AdminUser } from '../../services/api';
 
 const UsersPage = () => {
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -41,18 +43,9 @@ const UsersPage = () => {
 
   const fetchUsers = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('/api/admin-users', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setUsers(data.data.users || []);
-      }
+      setIsLoading(true);
+      const response = await apiService.getAdminUsers();
+      setUsers(response.data);
     } catch (error) {
       console.error('Error fetching users:', error);
     } finally {
@@ -62,95 +55,64 @@ const UsersPage = () => {
 
   const handleCreateUser = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('/api/admin-users', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userForm),
-      });
-
-      if (response.ok) {
-        setShowCreateModal(false);
-        setUserForm({ username: '', email: '', password: '', role: 'COCINA', full_name: '', phone: '' });
-        fetchUsers();
-      }
-    } catch (error) {
+      await apiService.createAdminUser(userForm);
+      setShowCreateModal(false);
+      setUserForm({ username: '', email: '', password: '', role: 'COCINA', full_name: '', phone: '' });
+      fetchUsers();
+    } catch (error: any) {
       console.error('Error creating user:', error);
+      alert(error.message || 'Error al crear usuario');
     }
   };
 
   const handleEditUser = async () => {
+    if (!selectedUser) return;
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`/api/admin-users/${selectedUser.id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userForm),
+      await apiService.updateAdminUser(selectedUser.id, {
+        email: userForm.email,
+        role: userForm.role as AdminUser['role'],
+        full_name: userForm.full_name,
+        phone: userForm.phone,
       });
-
-      if (response.ok) {
-        setShowEditModal(false);
-        setSelectedUser(null);
-        fetchUsers();
-      }
-    } catch (error) {
+      setShowEditModal(false);
+      setSelectedUser(null);
+      fetchUsers();
+    } catch (error: any) {
       console.error('Error updating user:', error);
+      alert(error.message || 'Error al actualizar usuario');
     }
   };
 
   const handleResetPassword = async () => {
+    if (!selectedUser) return;
     if (resetForm.new_password !== resetForm.confirm_password) {
       alert('Las contraseñas no coinciden');
       return;
     }
 
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`/api/admin-users/${selectedUser.id}/reset-password`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ new_password: resetForm.new_password }),
-      });
-
-      if (response.ok) {
-        setShowResetModal(false);
-        setSelectedUser(null);
-        setResetForm({ new_password: '', confirm_password: '' });
-      }
-    } catch (error) {
+      await apiService.resetAdminUserPassword(selectedUser.id, resetForm.new_password);
+      setShowResetModal(false);
+      setSelectedUser(null);
+      setResetForm({ new_password: '', confirm_password: '' });
+      alert('Contraseña actualizada correctamente');
+    } catch (error: any) {
       console.error('Error resetting password:', error);
+      alert(error.message || 'Error al resetear la contraseña');
     }
   };
 
-  const handleDeleteUser = async (userId) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar este usuario?')) {
+  const handleDeleteUser = async (userId: AdminUser['id']) => {
+    if (!confirm('¿Estás seguro de que quieres desactivar este usuario?')) {
       return;
     }
 
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`/api/admin-users/${userId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        fetchUsers();
-      }
-    } catch (error) {
-      console.error('Error deleting user:', error);
+      await apiService.deactivateAdminUser(userId);
+      fetchUsers();
+    } catch (error: any) {
+      console.error('Error deactivating user:', error);
+      alert(error.message || 'Error al desactivar usuario');
     }
   };
 
@@ -343,7 +305,7 @@ const UsersPage = () => {
                         value={userForm.password}
                         onChange={(e) => setUserForm({...userForm, password: e.target.value})}
                         className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Mínimo 6 caracteres"
+                        placeholder="Mínimo 8 caracteres"
                       />
                       <button
                         type="button"
@@ -383,7 +345,7 @@ const UsersPage = () => {
                       value={userForm.phone}
                       onChange={(e) => setUserForm({...userForm, phone: e.target.value})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="+52 555-0123"
+                      placeholder="228 123 4567"
                     />
                   </div>
                 </div>
@@ -488,7 +450,7 @@ const UsersPage = () => {
                         value={resetForm.new_password}
                         onChange={(e) => setResetForm({...resetForm, new_password: e.target.value})}
                         className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Mínimo 6 caracteres"
+                        placeholder="Mínimo 8 caracteres"
                       />
                       <button
                         type="button"

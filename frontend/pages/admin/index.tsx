@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import AdminLayout from '../../components/Admin/AdminLayout';
-// Removed apiGet import - using fetch directly like orders page
+import apiService from '../../services/api';
 import { withAuth } from '../../middleware/auth';
-import { 
+import {
   ShoppingCart, 
   Users, 
   Star, 
@@ -44,8 +44,8 @@ interface DashboardData {
     avg_rating: number;
     positive_reviews: number;
   };
-  weeklySales: any[];
-  topProducts: any[];
+  weekly_sales: any[];
+  top_products: any[];
 }
 
 interface RecentOrder {
@@ -71,28 +71,14 @@ const AdminDashboard = () => {
         setError(null);
 
         // Cargar datos del dashboard
-        const dashboardResponse = await fetch('/api/reports/dashboard', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
-          },
-        });
-        const dashboardResult = await dashboardResponse.json();
-        setDashboardData(dashboardResult.data);
+        const dashboardResponse = await apiService.getReport('dashboard');
+        setDashboardData(dashboardResponse.data as DashboardData);
 
         // Cargar pedidos recientes
-        const ordersResponse = await fetch('/api/orders?limit=5', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
-          },
-        });
-        const ordersResult = await ordersResponse.json();
-        
+        const ordersResponse = await apiService.getOrders();
+
         // Tomar los últimos 5 pedidos
-        const recent = ordersResult.data.slice(0, 5).map((order: any) => ({
+        const recent = ordersResponse.data.slice(0, 5).map((order) => ({
           id: order.id,
           customer_name: order.customer_name || 'Cliente',
           customer_email: order.customer_email || '',
@@ -206,30 +192,6 @@ const AdminDashboard = () => {
     window.location.href = `/admin/orders?view=${orderId}`;
   };
 
-  const handleMarkOrdersDelivered = async () => {
-    try {
-      const response = await fetch('/api/orders/test/mark-delivered', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
-        }
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        alert(`✅ ${result.message}`);
-        // Recargar datos del dashboard
-        window.location.reload();
-      } else {
-        alert(`❌ Error: ${result.error}`);
-      }
-    } catch (error) {
-      console.error('Error marking orders as delivered:', error);
-      alert('❌ Error al marcar pedidos como entregados');
-    }
-  };
-
   if (isLoading) {
     return (
       <AdminLayout>
@@ -271,16 +233,6 @@ const AdminDashboard = () => {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
             <p className="text-gray-600 mt-2">Resumen general del negocio</p>
-          </div>
-          <div className="flex space-x-3">
-            {/* Botón de prueba oculto - cambiar 'hidden' por 'block' si necesitas generar datos de prueba */}
-            <button
-              onClick={handleMarkOrdersDelivered}
-              className="hidden bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-              title="Botón de prueba - oculto por defecto"
-            >
-              📦 Marcar Pedidos como Entregados (Test)
-            </button>
           </div>
         </div>
 
@@ -402,9 +354,9 @@ const AdminDashboard = () => {
             <p className="text-sm text-gray-600 mt-1">Ingresos por día</p>
           </div>
           <div className="p-6">
-            {dashboardData && dashboardData.weeklySales && dashboardData.weeklySales.length > 0 ? (
+            {dashboardData && dashboardData.weekly_sales && dashboardData.weekly_sales.length > 0 ? (
               <div className="space-y-4">
-                {dashboardData.weeklySales.map((sale, index) => (
+                {dashboardData.weekly_sales.map((sale, index) => (
                   <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div>
                       <p className="font-medium text-gray-900">
@@ -422,7 +374,7 @@ const AdminDashboard = () => {
                         <div 
                           className="bg-green-500 h-2 rounded-full" 
                           style={{ 
-                            width: `${Math.min((sale.revenue / Math.max(...dashboardData.weeklySales.map(s => s.revenue))) * 100, 100)}%` 
+                            width: `${Math.min((sale.revenue / Math.max(...dashboardData.weekly_sales.map(s => s.revenue))) * 100, 100)}%` 
                           }}
                         ></div>
                       </div>
@@ -443,7 +395,7 @@ const AdminDashboard = () => {
         </div>
 
         {/* Top Products */}
-        {dashboardData && dashboardData.topProducts && dashboardData.topProducts.length > 0 && (
+        {dashboardData && dashboardData.top_products && dashboardData.top_products.length > 0 && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200">
             <div className="p-6 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Productos Más Vendidos</h2>
@@ -451,7 +403,7 @@ const AdminDashboard = () => {
             </div>
             <div className="p-6">
               <div className="space-y-4">
-                {dashboardData.topProducts.slice(0, 5).map((product, index) => (
+                {dashboardData.top_products.slice(0, 5).map((product, index) => (
                   <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center space-x-3">
                       <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
